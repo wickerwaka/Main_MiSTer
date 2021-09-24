@@ -27,12 +27,12 @@ else
 	BUILDDIR = $(BUILDBASE)/release
 endif
 
-INCLUDE	=  -I$(SRCDIR)/
-INCLUDE	+= -I$(SRCDIR)/support/minimig
+INCLUDE =  -I$(SRCDIR)/
+INCLUDE += -I$(SRCDIR)/support/minimig
 INCLUDE += -I$(SRCDIR)/support/chd
-INCLUDE	+= -I$(SRCDIR)/lib/libco
-INCLUDE	+= -I$(SRCDIR)/lib/miniz
-INCLUDE	+= -I$(SRCDIR)/lib/md5
+INCLUDE += -I$(SRCDIR)/lib/libco
+INCLUDE += -I$(SRCDIR)/lib/miniz
+INCLUDE += -I$(SRCDIR)/lib/md5
 INCLUDE += -I$(SRCDIR)/lib/lzma
 INCLUDE += -I$(SRCDIR)/lib/libchdr/include
 INCLUDE += -I$(SRCDIR)/lib/flac/include
@@ -42,9 +42,9 @@ INCLUDE += -I$(SRCDIR)/lib/bluetooth
 C_SRC =   $(wildcard $(SRCDIR)/*.c) \
           $(wildcard $(SRCDIR)/lib/miniz/*.c) \
           $(wildcard $(SRCDIR)/lib/md5/*.c) \
-	      $(wildcard $(SRCDIR)/lib/lzma/*.c) \
-	      $(wildcard $(SRCDIR)/lib/flac/src/*.c) \
-	      $(wildcard $(SRCDIR)/lib/libchdr/*.c) \
+          $(wildcard $(SRCDIR)/lib/lzma/*.c) \
+          $(wildcard $(SRCDIR)/lib/flac/src/*.c) \
+          $(wildcard $(SRCDIR)/lib/libchdr/*.c) \
           $(SRCDIR)/lib/libco/arm.c 
 
 CPP_SRC = $(wildcard $(SRCDIR)/*.cpp) \
@@ -55,16 +55,16 @@ IMG =     $(wildcard $(SRCDIR)/*.png)
 
 IMLIB2_LIB  = -Llib/imlib2 -lfreetype -lbz2 -lpng16 -lz -lImlib2
 
-OBJ	= $(C_SRC:$(SRCDIR)/%.c=$(BUILDDIR)/%.c.o) \
+OBJ = $(C_SRC:$(SRCDIR)/%.c=$(BUILDDIR)/%.c.o) \
       $(CPP_SRC:$(SRCDIR)/%.cpp=$(BUILDDIR)/%.cpp.o) \
-	  $(IMG:$(SRCDIR)/%.png=$(BUILDDIR)/%.png.o)
+      $(IMG:$(SRCDIR)/%.png=$(BUILDDIR)/%.png.o)
 
-DEP	= $(C_SRC:$(SRCDIR)/%.c=$(BUILDDIR)/%.c.d) \
+DEP = $(C_SRC:$(SRCDIR)/%.c=$(BUILDDIR)/%.c.d) \
       $(CPP_SRC:$(SRCDIR)/%.cpp=$(BUILDDIR)/%.cpp.d)
 
-DFLAGS	= $(INCLUDE) -D_7ZIP_ST -DPACKAGE_VERSION=\"1.3.3\" -DFLAC_API_EXPORTS -DFLAC__HAS_OGG=0 -DHAVE_LROUND -DHAVE_STDINT_H -DHAVE_STDLIB_H -DHAVE_SYS_PARAM_H -DENABLE_64_BIT_WORDS=0 -D_FILE_OFFSET_BITS=64 -D_LARGEFILE64_SOURCE -DVDATE=\"`date +"%y%m%d"`\"
-CFLAGS	= $(DFLAGS) -g -Wall -Wextra -Wno-strict-aliasing -Wno-format-truncation -Wno-psabi -c
-LFLAGS	= -lc -lstdc++ -lm -lrt $(IMLIB2_LIB) -Llib/bluetooth -lbluetooth
+DFLAGS = $(INCLUDE) -D_7ZIP_ST -DPACKAGE_VERSION=\"1.3.3\" -DFLAC_API_EXPORTS -DFLAC__HAS_OGG=0 -DHAVE_LROUND -DHAVE_STDINT_H -DHAVE_STDLIB_H -DHAVE_SYS_PARAM_H -DENABLE_64_BIT_WORDS=0 -D_FILE_OFFSET_BITS=64 -D_LARGEFILE64_SOURCE -DVDATE=\"`date +"%y%m%d"`\"
+CFLAGS = $(DFLAGS) -g -Wall -Wextra -Wno-strict-aliasing -Wno-format-truncation -Wno-psabi -c
+LFLAGS = -lc -lstdc++ -lm -lrt $(IMLIB2_LIB) -Llib/bluetooth -lbluetooth
 
 ifeq ($(DEBUG),1)
 	CFLAGS += -g -O0 -fomit-frame-pointer
@@ -74,10 +74,17 @@ else
 	LFLAGS +=
 endif
 
-$(PRJ): $(OBJ)
+ifeq ($(DEBUG),1)
+$(PRJ): $(PRJ).elf
+	$(Q)cp $< $@
+else
+$(PRJ): $(PRJ).elf
+	$(Q)$(STRIP) -o $@ $<
+endif
+
+$(PRJ).elf: $(OBJ)
 	$(Q)$(info $@)
 	$(Q)$(CC) -o $@ $+ $(LFLAGS) 
-	$(Q)cp $@ $@.elf
 
 clean:
 	$(Q)rm -f *.elf *.map *.lst *.user *~ $(PRJ)
