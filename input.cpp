@@ -4387,6 +4387,10 @@ int input_test(int getchar)
 						if (len > 4 && !strcasecmp(cmd + len - 4, ".mra")) arcade_load(cmd + 10);
 						else fpga_load_rbf(cmd + 10);
 					}
+					else if (!strncmp(cmd, "load_file ", 10))
+					{
+						user_io_load_file(cmd + 10);
+					}
 				}
 			}
 

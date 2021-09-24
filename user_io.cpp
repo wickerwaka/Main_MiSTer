@@ -73,13 +73,13 @@ static bool scrl_status = 0;
 static uint16_t sdram_cfg = 0;
 
 static char last_filename[1024] = {};
-void user_io_store_filename(char *filename)
+void user_io_store_filename(const char *filename)
 {
-	char *p = strrchr(filename, '/');
-	if (p) strcpy(last_filename, p + 1);
+	const char *slash = strrchr(filename, '/');
+	if (slash) strcpy(last_filename, slash + 1);
 	else strcpy(last_filename, filename);
 
-	p = strrchr(last_filename, '.');
+	char *p = strrchr(last_filename, '.');
 	if (p) *p = 0;
 }
 
@@ -3499,12 +3499,12 @@ void user_io_kbd(uint16_t key, int press)
 	}
 }
 
-unsigned char user_io_ext_idx(char *name, char* ext)
+unsigned char user_io_ext_idx(const char *name, const char* ext, bool *was_found)
 {
 	unsigned char idx = 0;
 	printf("Subindex of \"%s\" in \"%s\": ", name, ext);
 
-	char *p = strrchr(name, '.');
+	const char *p = strrchr(name, '.');
 	if (p)
 	{
 		p++;
@@ -3527,6 +3527,10 @@ unsigned char user_io_ext_idx(char *name, char* ext)
 			if (found)
 			{
 				printf("%d\n", idx);
+				if( was_found )
+				{
+					*was_found = true;
+				}
 				return idx;
 			}
 
@@ -3534,6 +3538,11 @@ unsigned char user_io_ext_idx(char *name, char* ext)
 			idx++;
 			ext += 3;
 		}
+	}
+
+	if( was_found )
+	{
+		*was_found = false;
 	}
 
 	printf("not found! use 0\n");

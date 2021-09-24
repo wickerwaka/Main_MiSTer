@@ -41,13 +41,15 @@ int main(int argc, char *argv[])
 	// hardware interrupt handler in Linux.  This reduces idle latency
 	// in the main loop by about 6-7x.
 	cpu_set_t set;
-	CPU_ZERO(&set);
+ 	CPU_ZERO(&set);
 	CPU_SET(1, &set);
 	sched_setaffinity(0, sizeof(set), &set);
 
 	fpga_io_init();
 
 	DISKLED_OFF;
+
+	setvbuf(stdout, NULL, _IONBF, 0);
 
 	printf("\nMinimig by Dennis van Weeren");
 	printf("\nARM Controller by Jakub Bednarski");
