@@ -835,7 +835,7 @@ static void vga_nag()
 	EnableOsd_on(OSD_ALL);
 }
 
-void process_addon(char *ext, uint8_t idx)
+void process_addon(const char *ext, uint8_t idx)
 {
 	static char name[1024];
 
@@ -950,6 +950,117 @@ static int next_ar(int ar, int minus)
 	}
 
 	return ar;
+}
+
+void user_io_select_file(const char *selPath, int ioctl_index, uint32_t load_addr, bool store_name, bool open_save, const char *extensions, const char *addon)
+{
+	if (store_name)
+	{
+		char str[64];
+		sprintf(str, "%s.f%d", user_io_get_core_name(), ioctl_index);
+		FileSaveConfig(str, selPath, sizeof(selPath));
+	}
+
+	if (selPath[0])
+	{
+		char idx = user_io_ext_idx(selPath, extensions, nullptr) << 6 | ioctl_index;
+		if (addon[0] == 'f' && addon[1] != '1') process_addon(addon, idx);
+
+		if (is_neogeo())
+		{
+			neogeo_romset_tx(selPath);
+		}
+		else
+		{
+			if (is_pce())
+			{
+				pcecd_set_image(0, "");
+				pcecd_reset();
+			}
+			if (!store_name) user_io_store_filename(selPath);
+			user_io_file_tx(selPath, idx, open_save, 0, 0, load_addr);
+			if (user_io_use_cheats()) cheats_init(selPath, user_io_get_file_crc());
+		}
+
+		if (addon[0] == 'f' && addon[1] == '1') process_addon(addon, idx);
+	}
+}
+
+void user_io_load_file(const char *path)
+{
+	user_io_read_confstr();
+
+	int confstr_index = 2;
+	char ext[256];
+	char addon[3];
+	addon[0] = 0;
+
+	bool gba_gb_ext = is_gba() && FileExists(user_io_make_filepath(HomeDir(), "goomba.rom"));
+
+	while( true )
+	{
+		const char *p = user_io_get_confstr(confstr_index);
+		confstr_index += 1;
+
+		if(!p)
+		{
+			break;
+		}
+
+		if (p[0] != 'F')
+		{
+			continue;
+		}
+
+		bool store_name = false;
+		bool open_save = false;
+		int ioctl_index = 1;
+		uint32_t load_addr = 0;
+
+		int pidx = 1;
+
+		if (p[1] == 'S')
+		{
+			open_save = true;
+			pidx++;
+		}
+		else if (p[1] == 'C')
+		{
+			store_name = true;
+			pidx++;
+		}
+
+		if (p[pidx] >= '0' && p[pidx] <= '9')
+		{
+			ioctl_index = p[pidx] - '0';
+		}
+
+		substrcpy(ext, p, 1);
+		if (gba_gb_ext) strcat(ext, "GB GBC");
+		while (strlen(ext) % 3) strcat(ext, " ");
+
+		bool found_ext = false;
+		user_io_ext_idx(path, ext, &found_ext);
+
+		if( !found_ext )
+		{
+			continue;
+		}
+
+		char load_str[256];
+		if (substrcpy(load_str, p, 3))
+		{
+			load_addr = strtoul(load_str, NULL, 16);
+			if (load_addr < 0x20000000 || load_addr >= 0x40000000)
+			{
+				printf("Loading address 0x%X is outside the supported range! Using normal load.\n", load_addr);
+				load_addr = 0;
+			}
+		}
+
+		user_io_select_file(path, ioctl_index, load_addr, store_name, open_save, ext, addon);
+		break;
+	}
 }
 
 static int joymap_first = 0;
@@ -2164,40 +2275,8 @@ void HandleUI(void)
 			MenuHide();
 			printf("File selected: %s\n", selPath);
 			memcpy(Selected_F[ioctl_index & 15], selPath, sizeof(Selected_F[ioctl_index & 15]));
-
-			if (store_name)
-			{
-				char str[64];
-				sprintf(str, "%s.f%d", user_io_get_core_name(), ioctl_index);
-				FileSaveConfig(str, selPath, sizeof(selPath));
-			}
-
-			if (selPath[0])
-			{
-
-				char idx = user_io_ext_idx(selPath, fs_pFileExt) << 6 | ioctl_index;
-				if (addon[0] == 'f' && addon[1] != '1') process_addon(addon, idx);
-
-				if (fs_Options & SCANO_NEOGEO)
-				{
-					neogeo_romset_tx(selPath);
-				}
-				else
-				{
-					if (is_pce())
-					{
-						pcecd_set_image(0, "");
-						pcecd_reset();
-					}
-					if (!store_name) user_io_store_filename(selPath);
-					user_io_file_tx(selPath, idx, opensave, 0, 0, load_addr);
-					if (user_io_use_cheats()) cheats_init(selPath, user_io_get_file_crc());
-				}
-
-				if (addon[0] == 'f' && addon[1] == '1') process_addon(addon, idx);
-
-				recent_update(SelectedDir, Selected_F[ioctl_index & 15], SelectedLabel, ioctl_index);
-			}
+			user_io_select_file(selPath, ioctl_index, load_addr, store_name, opensave, fs_pFileExt, addon);
+			recent_update(SelectedDir, Selected_F[ioctl_index & 15], SelectedLabel, ioctl_index);
 		}
 		break;
 
@@ -2209,7 +2288,7 @@ void HandleUI(void)
 			printf("Image selected: %s\n", selPath);
 			memcpy(Selected_S[(int)ioctl_index], selPath, sizeof(Selected_S[(int)ioctl_index]));
 
-			char idx = user_io_ext_idx(selPath, fs_pFileExt) << 6 | ioctl_index;
+			char idx = user_io_ext_idx(selPath, fs_pFileExt, nullptr) << 6 | ioctl_index;
 			if (addon[0] == 'f' && addon[1] != '1') process_addon(addon, idx);
 
 			if (is_x86())
@@ -2227,7 +2306,7 @@ void HandleUI(void)
 			}
 			else
 			{
-				user_io_set_index(user_io_ext_idx(selPath, fs_pFileExt) << 6 | (menusub + 1));
+				user_io_set_index(user_io_ext_idx(selPath, fs_pFileExt, nullptr) << 6 | (menusub + 1));
 				user_io_file_mount(selPath, ioctl_index);
 			}
 
