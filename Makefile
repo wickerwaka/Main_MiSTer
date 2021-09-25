@@ -63,7 +63,7 @@ DEP = $(C_SRC:$(SRCDIR)/%.c=$(BUILDDIR)/%.c.d) \
       $(CPP_SRC:$(SRCDIR)/%.cpp=$(BUILDDIR)/%.cpp.d)
 
 DFLAGS = $(INCLUDE) -D_7ZIP_ST -DPACKAGE_VERSION=\"1.3.3\" -DFLAC_API_EXPORTS -DFLAC__HAS_OGG=0 -DHAVE_LROUND -DHAVE_STDINT_H -DHAVE_STDLIB_H -DHAVE_SYS_PARAM_H -DENABLE_64_BIT_WORDS=0 -D_FILE_OFFSET_BITS=64 -D_LARGEFILE64_SOURCE -DVDATE=\"`date +"%y%m%d"`\"
-CFLAGS = $(DFLAGS) -g -Wall -Wextra -Wno-strict-aliasing -Wno-format-truncation -Wno-psabi -c
+CFLAGS = $(DFLAGS) -Wall -Wextra -Wno-strict-aliasing -Wno-format-truncation -Wno-psabi -c
 LFLAGS = -lc -lstdc++ -lm -lrt $(IMLIB2_LIB) -Llib/bluetooth -lbluetooth
 
 ifeq ($(DEBUG),1)
