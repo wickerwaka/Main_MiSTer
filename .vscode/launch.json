@@ -10,7 +10,7 @@
             "request": "launch",
             "program": "/media/fat/MiSTer-debug",
             "args": [],
-            "stopAtEntry": true,
+            "stopAtEntry": false,
             "cwd": "/",
             "environment": [],
             "externalConsole": false,

@@ -1007,6 +1007,12 @@ void user_io_load_file(const char *path)
 			break;
 		}
 
+		switch(p[0])
+		{
+			case 'H': case 'h': case 'D': case 'd': p += 2;
+			default: break;
+		}
+
 		if (p[0] != 'F')
 		{
 			continue;
