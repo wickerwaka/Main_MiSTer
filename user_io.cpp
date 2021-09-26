@@ -3503,39 +3503,38 @@ unsigned char user_io_ext_idx(const char *name, const char* ext, bool *was_found
 	printf("Subindex of \"%s\" in \"%s\": ", name, ext);
 
 	const char *p = strrchr(name, '.');
-	if (p)
+	if(!p) p = ".";
+
+	p++;
+	char e[4] = "   ";
+	for (int i = 0; i < 3; i++)
 	{
-		p++;
-		char e[4] = "   ";
+		if (!*p) break;
+		e[i] = *p++;
+	}
+
+	while (*ext)
+	{
+		int found = 1;
 		for (int i = 0; i < 3; i++)
 		{
-			if (!*p) break;
-			e[i] = *p++;
+			if (ext[i] == '*') break;
+			if (ext[i] != '?' && (toupper(ext[i]) != toupper(e[i]))) found = 0;
 		}
 
-		while (*ext)
+		if (found)
 		{
-			int found = 1;
-			for (int i = 0; i < 3; i++)
+			printf("%d\n", idx);
+			if( was_found )
 			{
-				if (ext[i] == '*') break;
-				if (ext[i] != '?' && (toupper(ext[i]) != toupper(e[i]))) found = 0;
+				*was_found = true;
 			}
-
-			if (found)
-			{
-				printf("%d\n", idx);
-				if( was_found )
-				{
-					*was_found = true;
-				}
-				return idx;
-			}
-
-			if (strlen(ext) <= 3) break;
-			idx++;
-			ext += 3;
+			return idx;
 		}
+
+		if (strlen(ext) <= 3) break;
+		idx++;
+		ext += 3;
 	}
 
 	if( was_found )
