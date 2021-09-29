@@ -182,6 +182,22 @@
 #define EMU_JOY0  2
 #define EMU_JOY1  3
 
+typedef enum
+{
+	UIO_SELECTION_FILE,
+	UIO_SELECTION_IMAGE,
+} uio_selection_type;
+
+typedef struct
+{
+	uio_selection_type type;
+	int ioctl_index;
+	uint32_t load_addr;
+	bool store_name;
+	bool open_save;
+	char extensions[16];
+} uio_selection_descriptor;
+
 void user_io_init(const char *path, const char *xml);
 unsigned char user_io_core_type();
 void user_io_read_core_name();
@@ -234,7 +250,11 @@ void user_io_file_rx_data(uint8_t *addr, uint32_t len);
 void user_io_file_info(const char *ext);
 int user_io_get_width();
 
-void user_io_load_file(const char *path);
+bool user_io_parse_addon(const char *confstr, char *addon, int addon_size);
+bool user_io_parse_selection(const char *confstr, int index, uio_selection_descriptor *desc);
+void user_io_load_file(const char *path, const uio_selection_descriptor* sel_desc, const char *addon);
+void user_io_mount_image(const char *path, const uio_selection_descriptor* sel_desc, const char *addon);
+void user_io_load_or_mount(const char *path);
 
 void user_io_check_reset(unsigned short modifiers, char useKeys);
 

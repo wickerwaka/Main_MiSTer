@@ -4369,7 +4369,7 @@ int input_test(int getchar)
 					}
 					else if (!strncmp(cmd, "load_file ", 10))
 					{
-						user_io_load_file(cmd + 10);
+						user_io_load_or_mount(cmd + 10);
 					}
 				}
 			}
