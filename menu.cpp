@@ -131,6 +131,7 @@ enum MENU
 	MENU_COEFF_FILE_SELECTED,
 	MENU_GAMMA_FILE_SELECTED,
 	MENU_AFILTER_FILE_SELECTED,
+	MENU_SMASK_FILE_SELECTED,
 
 	// Generic
 	MENU_GENERIC_MAIN1,
@@ -209,6 +210,7 @@ const char *config_uart_msg[] = { "      None", "       PPP", "   Console", "   
 const char *config_midilink_mode[] = {"Local", "Local", "  USB", "  UDP", "-----", "-----", "  USB" };
 const char *config_scaler_msg[] = { "Internal","Custom" };
 const char *config_afilter_msg[] = { "Internal","Custom" };
+const char *config_smask_msg[] = { "None", "1x", "2x", "1x Rotated", "2x Rotated" };
 const char *config_gamma_msg[] = { "Off","On" };
 const char *config_scale[] = { "Normal", "V-Integer", "HV-Integer-", "HV-Integer+", "HV-Integer", "???", "???", "???" };
 
@@ -2107,7 +2109,7 @@ void HandleUI(void)
 			while(1)
 			{
 				n = 0;
-				menumask = 0xf80F;
+				menumask = 0x3800f;
 
 				if (!menusub) firstmenu = 0;
 				adjvisible = 0;
@@ -2188,24 +2190,40 @@ void HandleUI(void)
 					MenuWrite(n++, s, menusub == 10, !audio_filter_en() || !S_ISDIR(getFileType(AFILTER_DIR)));
 				}
 
-				if (is_minimig() || is_st())
-				{
-					menumask &= ~0x1800;
-				}
-				else
+				if (video_get_shadow_mask_mode() >= 0)
 				{
 					MenuWrite(n++);
-					MenuWrite(n++, " Reset settings", menusub == 11, is_archie());
-					MenuWrite(n++, " Save settings", menusub == 12, 0);
+					menumask |= 0x1800;
+					sprintf(s, " Shadow Mask - %s", config_smask_msg[video_get_shadow_mask_mode()]);
+					MenuWrite(n++, s, menusub == 11);
+
+					memset(s, 0, sizeof(s));
+					s[0] = ' ';
+					if (strlen(video_get_shadow_mask())) strncpy(s + 1, video_get_shadow_mask(), 25);
+					else strcpy(s, " < none >");
+
+					while (strlen(s) < 26) strcat(s, " ");
+					strcat(s, " \x16 ");
+
+					MenuWrite(n++, s, menusub == 12, !video_get_shadow_mask_mode() || !S_ISDIR(getFileType(SMASK_DIR)));
+				}
+
+
+				if (!is_minimig() && !is_st())
+				{
+					menumask |= 0x6000;
+					MenuWrite(n++);
+					MenuWrite(n++, " Reset settings", menusub == 13, is_archie());
+					MenuWrite(n++, " Save settings", menusub == 14, 0);
 				}
 
 				MenuWrite(n++);
 				cr = n;
-				MenuWrite(n++, " Reboot (hold \x16 cold reboot)", menusub == 13);
-				MenuWrite(n++, " About", menusub == 14);
+				MenuWrite(n++, " Reboot (hold \x16 cold reboot)", menusub == 15);
+				MenuWrite(n++, " About", menusub == 16);
 
 				while(n < OsdGetSize() - 1) MenuWrite(n++);
-				MenuWrite(n++, STD_EXIT, menusub == 15, 0, OSD_ARROW_LEFT);
+				MenuWrite(n++, STD_EXIT, menusub == 17, 0, OSD_ARROW_LEFT);
 				sysinfo_timer = 0;
 
 				if (!adjvisible) break;
@@ -2329,6 +2347,18 @@ void HandleUI(void)
 				}
 				break;
 			case 11:
+				video_set_shadow_mask_mode(video_get_shadow_mask_mode() + 1);
+				menustate = MENU_COMMON1;
+				break;
+			case 12:
+				if (video_get_shadow_mask_mode())
+				{
+					snprintf(Selected_tmp, sizeof(Selected_tmp), SMASK_DIR"/%s", video_get_shadow_mask());
+					if (!FileExists(Selected_tmp)) snprintf(Selected_tmp, sizeof(Selected_tmp), SMASK_DIR);
+					SelectFile(Selected_tmp, 0, SCANO_DIR | SCANO_TXT, MENU_SMASK_FILE_SELECTED, MENU_COMMON1);
+				}
+				break;
+			case 13:
 				if (!is_archie())
 				{
 					menustate = MENU_RESET1;
@@ -2341,7 +2371,7 @@ void HandleUI(void)
 				}
 				break;
 
-			case 12:
+			case 14:
 				// Save settings
 				menustate = MENU_GENERIC_MAIN1;
 				menusub = 0;
@@ -2366,7 +2396,7 @@ void HandleUI(void)
 				}
 				break;
 
-			case 13:
+			case 15:
 				{
 					reboot_req = 1;
 
@@ -2379,7 +2409,7 @@ void HandleUI(void)
 				}
 				break;
 
-			case 14:
+			case 16:
 				menustate = MENU_ABOUT1;
 				menusub = 0;
 				break;
@@ -2917,6 +2947,20 @@ void HandleUI(void)
 		}
 		break;
 
+	case MENU_SMASK_FILE_SELECTED:
+		{
+			char *p = strcasestr(selPath, SMASK_DIR"/");
+			if (!p) video_set_shadow_mask(selPath);
+			else
+			{
+				p += strlen(SMASK_DIR);
+				while (*p == '/') p++;
+				video_set_shadow_mask(p);
+			}
+			menustate = MENU_COMMON1;
+		}
+		break;
+
 	case MENU_MISC1:
 		OsdSetSize(16);
 		helptext_idx = 0;
@@ -3420,7 +3464,7 @@ void HandleUI(void)
 		if (menu | select | left)
 		{
 			menustate = MENU_COMMON1;
-			menusub = 14;
+			menusub = 16;
 		}
 		break;
 
