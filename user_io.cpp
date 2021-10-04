@@ -616,27 +616,19 @@ static void parse_config()
 				use_cheats = 1;
 			}
 
-			if (p[0] == 'F' && p[1] == 'C')
+			uio_selection_descriptor sel_desc;
+			if (user_io_parse_selection(p, 0, &sel_desc))
 			{
-				static char str[1024];
-				uint32_t load_addr = 0;
-				if (substrcpy(str, p, 3))
+				if( sel_desc.type == UIO_SELECTION_FILE && sel_desc.store_name )
 				{
-					load_addr = strtoul(str, NULL, 16);
-					if (load_addr < 0x20000000 || load_addr >= 0x40000000)
+					static char str[1024];
+
+					sprintf(str, "%s.f%d", user_io_get_core_name(), sel_desc.ioctl_index);
+					if (FileLoadConfig(str, str, sizeof(str)) && str[0])
 					{
-						printf("Loading address 0x%X is outside the supported range! Using normal load.\n", load_addr);
-						load_addr = 0;
+						StoreIdx_F(sel_desc.ioctl_index, str);
+						user_io_file_tx(str, sel_desc.ioctl_index, 0, 0, 0, sel_desc.load_addr);
 					}
-				}
-
-				sprintf(str, "%s.f%c", user_io_get_core_name(), p[2]);
-				if (FileLoadConfig(str, str, sizeof(str)) && str[0])
-				{
-
-					int idx = p[2] - '0';
-					StoreIdx_F(idx, str);
-					user_io_file_tx(str, idx, 0, 0, 0, load_addr);
 				}
 			}
 		}
