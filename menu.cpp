@@ -786,24 +786,6 @@ static void MenuWrite(unsigned char n, const char *s = "", unsigned char invert 
 	OsdWriteOffset(row, s, invert, stipple, 0, (row == 0 && firstmenu) ? 17 : (row == (OsdGetSize()-1) && !arrow) ? 16 : 0, 0);
 }
 
-const char* get_rbf_name_bootcore(char *str)
-{
-	if (!strlen(cfg.bootcore)) return "";
-	char *p = strrchr(str, '/');
-	if (!p) return str;
-
-	char *spl = strrchr(p + 1, '.');
-	if (spl && (!strcmp(spl, ".rbf") || !strcmp(spl, ".mra")))
-	{
-		*spl = 0;
-	}
-	else
-	{
-		return NULL;
-	}
-	return p + 1;
-}
-
 static void vga_nag()
 {
 	if (video_fb_state())
@@ -6046,45 +6028,41 @@ void HandleUI(void)
 
 		if (!rtc_timer || CheckTimer(rtc_timer))
 		{
-			rtc_timer = GetTimer(cfg.bootcore[0] != '\0' ? 100 : 1000);
+			rtc_timer = GetTimer(bootcore_pending() ? 100 : 1000);
 			char str[64] = { 0 };
-			char straux[64];
 
-			if (cfg.bootcore[0] != '\0')
+			if (bootcore_pending())
 			{
-				if (btimeout > 0)
+				OsdWrite(12, "\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81");
+				sprintf(str, " Bootcore -> %s", bootcore_type());
+				OsdWrite(13, str, 0, 0);
+				sprintf(str, " %s", bootcore_name());
+
+				char s[40];
+				memset(s, ' ', 32); // clear line buffer
+				s[32] = 0; // set temporary string length to OSD line length
+
+				int len = strlen(str);
+				if (len > 28)
 				{
-					OsdWrite(12, "\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81\x81");
-					sprintf(str, " Bootcore -> %s", bootcoretype);
-					OsdWrite(13, str, 0, 0);
-					strcpy(straux, cfg.bootcore);
-					sprintf(str, " %s", get_rbf_name_bootcore(straux));
+					len = 27; // trim display length if longer than 30 characters
+					s[28] = 22;
+				}
 
-					char s[40];
-					memset(s, ' ', 32); // clear line buffer
-					s[32] = 0; // set temporary string length to OSD line length
+				strncpy(s + 1, str, len); // display only name
+				//OsdWrite(14, s, 1, 0, 0, (32 * btimeout) / cfg.bootcore_timeout);
+				OsdWrite(14, s, 1, 0, 0, (32 * bootcore_remaining()) / bootcore_delay());
 
-					int len = strlen(str);
-					if (len > 28)
-					{
-						len = 27; // trim display length if longer than 30 characters
-						s[28] = 22;
-					}
-
-					strncpy(s + 1, str, len); // display only name
-					OsdWrite(14, s, 1, 0, 0, (32 * btimeout) / cfg.bootcore_timeout);
-
-					sprintf(str, "   Press any key to cancel");
-					OsdWrite(15, str, 0, 0);
-					btimeout--;
-					if (!btimeout)
-					{
-						OsdWrite(13, "", 0, 0);
-						OsdWrite(14, s, 1, 0, 0, 0);
-						sprintf(str, "           Loading...");
-						OsdWrite(15, str, 1, 0);
-						isMraName(cfg.bootcore) ? arcade_load(getFullPath(cfg.bootcore)) : fpga_load_rbf(cfg.bootcore);
-					}
+				sprintf(str, "   Press any key to cancel");
+				OsdWrite(15, str, 0, 0);
+				if (bootcore_ready())
+				{
+					OsdWrite(13, "", 0, 0);
+					OsdWrite(14, s, 1, 0, 0, 0);
+					sprintf(str, "           Loading...");
+					OsdWrite(15, str, 1, 0);
+					//isMraName(cfg.bootcore) ? arcade_load(getFullPath(cfg.bootcore)) : fpga_load_rbf(cfg.bootcore);
+					bootcore_launch();
 				}
 			}
 
