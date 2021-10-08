@@ -61,6 +61,8 @@ static const ini_var_t ini_vars[] =
 	{ "OSD_TIMEOUT", (void*)(&(cfg.osd_timeout)), INT16, 5, 3600 },
 	{ "DIRECT_VIDEO", (void*)(&(cfg.direct_video)), UINT8, 0, 1 },
 	{ "OSD_ROTATE", (void*)(&(cfg.osd_rotate)), UINT8, 0, 2 },
+	{ "OSD_FG", (void*)(&(cfg.osd_fg)), UINT16, 0, 0xffff },
+	{ "OSD_BG", (void*)(&(cfg.osd_bg)), UINT16, 0, 0xffff },
 	{ "GAMEPAD_DEFAULTS", (void*)(&(cfg.gamepad_defaults)), UINT8, 0, 1 },
 	{ "RECENTS", (void*)(&(cfg.recents)), UINT8, 0, 1 },
 	{ "CONTROLLER_INFO", (void*)(&(cfg.controller_info)), UINT8, 0, 10 },
@@ -344,5 +346,7 @@ void cfg_parse()
 	cfg.controller_info = 6;
 	cfg.browse_expand = 1;
 	cfg.logo = 1;
+	cfg.osd_fg = 0x4ecc;
+	cfg.osd_bg = 0x4200;
 	ini_parse(altcfg());
 }

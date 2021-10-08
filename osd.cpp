@@ -515,7 +515,7 @@ void InfoEnable(int x, int y, int width, int height)
 	DisableOsd();
 }
 
-void OsdRotation(uint8_t rotate)
+void OsdRotation(uint8_t rotate, uint16_t fg, uint16_t bg)
 {
 	spi_osd_cmd_cont(OSD_CMD_DISABLE);
 	spi_w(0);
@@ -523,6 +523,8 @@ void OsdRotation(uint8_t rotate)
 	spi_w(0);
 	spi_w(0);
 	spi_w(rotate);
+	spi_w(fg);
+	spi_w(bg);
 	DisableOsd();
 }
 

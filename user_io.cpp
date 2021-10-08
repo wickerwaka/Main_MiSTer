@@ -1231,7 +1231,7 @@ void user_io_init(const char *path, const char *xml)
 		break;
 	}
 
-	OsdRotation((cfg.osd_rotate == 1) ? 3 : (cfg.osd_rotate == 2) ? 1 : 0);
+	OsdRotation((cfg.osd_rotate == 1) ? 3 : (cfg.osd_rotate == 2) ? 1 : 0, cfg.osd_fg, cfg.osd_bg);
 
 	uart_mode = spi_uio_cmd16(UIO_GETUARTFLG, 0) || uart_speeds[0];
 	uint32_t mode = 0;

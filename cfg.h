@@ -37,6 +37,8 @@ typedef struct {
 	uint8_t fb_size;
 	uint8_t fb_terminal;
 	uint8_t osd_rotate;
+	uint16_t osd_fg;
+	uint16_t osd_bg;
 	uint16_t osd_timeout;
 	uint8_t gamepad_defaults;
 	uint8_t recents;

@@ -22,7 +22,7 @@ void OsdWriteOffset(unsigned char n, const char *s, unsigned char inver, unsigne
 void OsdClear();
 void OsdEnable(unsigned char mode);
 void InfoEnable(int x, int y, int width, int height);
-void OsdRotation(uint8_t rotate);
+void OsdRotation(uint8_t rotate, uint16_t fg, uint16_t bg);
 void OsdDisable();
 void OsdMenuCtl(int en);
 void OsdUpdate();
