@@ -2057,7 +2057,8 @@ void HandleUI(void)
 		{
 			MenuHide();
 			printf("File selected: %s\n", selPath);
-			bootcore_record_file(selPath);
+			if( !sel_desc.store_name)
+				bootcore_record_file(selPath);
 			memcpy(Selected_F[sel_desc.ioctl_index & 15], selPath, sizeof(Selected_F[sel_desc.ioctl_index & 15]));
 			user_io_load_file(selPath, &sel_desc, addon);
 			recent_update(SelectedDir, Selected_F[sel_desc.ioctl_index & 15], SelectedLabel, sel_desc.ioctl_index);
