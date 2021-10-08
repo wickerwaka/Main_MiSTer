@@ -962,7 +962,7 @@ void HandleUI(void)
 	minus = false;
 	recent = false;
 
-	if (c && cfg.bootcore[0] != '\0') cfg.bootcore[0] = '\0';
+	if (c && bootcore_pending()) bootcore_cancel();
 
 	if (is_menu())
 	{
@@ -6052,7 +6052,6 @@ void HandleUI(void)
 				}
 
 				strncpy(s + 1, str, len); // display only name
-				//OsdWrite(14, s, 1, 0, 0, (32 * btimeout) / cfg.bootcore_timeout);
 				OsdWrite(14, s, 1, 0, 0, (32 * bootcore_remaining()) / bootcore_delay());
 
 				sprintf(str, "   Press any key to cancel");
@@ -6063,7 +6062,6 @@ void HandleUI(void)
 					OsdWrite(14, s, 1, 0, 0, 0);
 					sprintf(str, "           Loading...");
 					OsdWrite(15, str, 1, 0);
-					//isMraName(cfg.bootcore) ? arcade_load(getFullPath(cfg.bootcore)) : fpga_load_rbf(cfg.bootcore);
 					bootcore_launch();
 				}
 			}

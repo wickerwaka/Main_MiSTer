@@ -1271,6 +1271,8 @@ void user_io_init(const char *path, const char *xml)
 	if (uartmode < 3 || uartmode > 4) midilink = 0;
 	SetMidiLinkMode(midilink);
 	SetUARTMode(uartmode);
+
+	bootcore_load_file();
 }
 
 static int joyswap = 0;

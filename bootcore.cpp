@@ -52,12 +52,12 @@ static bool isLastCore(bootcoreType t)
 	}
 }
 
-static bool isNamedCore(bootcoreType t)
+static bool isLastGame(bootcoreType t)
 {
 	switch( t )
 	{
-		case BOOTCORE_CORENAME:
-		case BOOTCORE_CORENAME_EXACT:
+		case BOOTCORE_LASTGAME_EXACT:
+		case BOOTCORE_LASTGAME:
 			return true;
 		default:
 			return false;
@@ -249,10 +249,7 @@ void bootcore_init(const char *path)
 				FileSaveConfig("lastcore.dat", &lastcore_save, sizeof(lastcore_save));
 			}
 			
-			if( lastcore_save.game_path[0] )
-			{
-				user_io_load_or_mount( lastcore_save.game_path );
-			}
+
 		}
 		return;
 	}
@@ -309,7 +306,7 @@ void bootcore_init(const char *path)
 
 void bootcore_record_file(const char *path)
 {
-	if( launch_type != BOOTCORE_LASTGAME && launch_type != BOOTCORE_LASTGAME_EXACT )
+	if( !isLastGame(launch_type) )
 	{
 		return;
 	}
@@ -319,6 +316,7 @@ void bootcore_record_file(const char *path)
 		return;
 	}
 
+	printf( "Bootcore: recorded %s for %s\n", path, lastcore_save.core_name );
 	strncpy(lastcore_save.game_path, path, sizeof(lastcore_save.game_path));
 	FileSaveConfig("lastcore.dat", &lastcore_save, sizeof(lastcore_save));
 }
@@ -333,6 +331,34 @@ void bootcore_launch()
 	else
 	{
 		fpga_load_rbf(core_path);
+	}
+}
+
+void bootcore_load_file()
+{
+	if( !isLastGame( launch_type ) )
+	{
+		return;
+	}
+
+	if( strcmp( CoreName, lastcore_save.core_name ) )
+	{
+		return;
+	}
+
+	if( lastcore_save.game_path[0] )
+	{
+		user_io_load_or_mount( lastcore_save.game_path );
+	}
+}
+
+void bootcore_cancel()
+{
+	launch_pending = false;
+	if( isLastCore( launch_type ) )
+	{
+		memset( &lastcore_save, 0, sizeof(lastcore_save) );
+		FileSaveConfig("lastcore.dat", &lastcore_save, sizeof(lastcore_save));
 	}
 }
 
@@ -369,9 +395,11 @@ const char *bootcore_type()
 	switch( launch_type )
 	{
 		case BOOTCORE_LASTCORE: return "lastcore";
-		case BOOTCORE_LASTCORE_EXACT: return "lastexactcore";
-		case BOOTCORE_CORENAME_EXACT: return "exactcorename";
+		case BOOTCORE_LASTCORE_EXACT: return "lastcore (exact)";
+		case BOOTCORE_CORENAME_EXACT: return "corename (exact)";
 		case BOOTCORE_CORENAME: return "corename";
+		case BOOTCORE_LASTGAME: return "lastgame";
+		case BOOTCORE_LASTGAME_EXACT: return "lastgame (exact)";
 		default: break;
 	}
 	return "none";

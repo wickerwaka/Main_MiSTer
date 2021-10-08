@@ -7,6 +7,8 @@
 
 void bootcore_init(const char *path);
 void bootcore_record_file(const char *path);
+void bootcore_load_file();
+void bootcore_cancel();
 
 void bootcore_launch();
 bool bootcore_pending();
