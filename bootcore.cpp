@@ -19,15 +19,68 @@ enum bootcoreType
 	BOOTCORE_NONE,
 	BOOTCORE_LASTCORE,
 	BOOTCORE_LASTCORE_EXACT,
+	BOOTCORE_LASTGAME,
+	BOOTCORE_LASTGAME_EXACT,
 	BOOTCORE_CORENAME,
 	BOOTCORE_CORENAME_EXACT
 };
+
+static bool isExact(bootcoreType t)
+{
+	switch( t )
+	{
+		case BOOTCORE_LASTCORE_EXACT:
+		case BOOTCORE_LASTGAME_EXACT:
+		case BOOTCORE_CORENAME_EXACT:
+			return true;
+		default:
+			return false;
+	}
+}
+
+static bool isLastCore(bootcoreType t)
+{
+	switch( t )
+	{
+		case BOOTCORE_LASTCORE_EXACT:
+		case BOOTCORE_LASTGAME_EXACT:
+		case BOOTCORE_LASTGAME:
+		case BOOTCORE_LASTCORE:
+			return true;
+		default:
+			return false;
+	}
+}
+
+static bool isNamedCore(bootcoreType t)
+{
+	switch( t )
+	{
+		case BOOTCORE_CORENAME:
+		case BOOTCORE_CORENAME_EXACT:
+			return true;
+		default:
+			return false;
+	}
+}
+
+
+typedef struct
+{
+	uint8_t version;
+	char core_name[32];
+	char core_path[256];
+	char game_path[256];
+} lastcoreSave_t;
+
+#define LASTCORE_VERSION 1
+static lastcoreSave_t lastcore_save;
 
 static char rbf_name[256];
 static char core_path[256];
 bootcoreType launch_type = BOOTCORE_NONE;
 static unsigned long launch_time;
-
+static bool launch_pending = false;
 
 void makeRBFName(char *str)
 {
@@ -136,17 +189,36 @@ char *findCore(const char *name, char *coreName, int indent)
 void bootcore_init(const char *path)
 {
 	char bootcore[256];
-	int len = FileLoadConfig("lastcore.dat", bootcore, sizeof(bootcore));
-	bootcore[len] = 0;
+	int len = FileLoadConfig("lastcore.dat", &lastcore_save, sizeof(lastcore_save));
+
+	if( len != sizeof(lastcore_save) || lastcore_save.version != LASTCORE_VERSION )
+	{
+		memset( &lastcore_save, 0, sizeof( lastcore_save ) );
+		lastcore_save.version = LASTCORE_VERSION;
+	}
+
+	launch_pending = false;
 
 	// determine type
 	if( !strcmp( cfg.bootcore, "lastcore" ) )
 	{
 		launch_type = BOOTCORE_LASTCORE;
+		strcpy(bootcore, lastcore_save.core_path);
 	}
 	else if( !strcmp( cfg.bootcore, "lastexactcore" ) )
 	{
 		launch_type = BOOTCORE_LASTCORE_EXACT;
+		strcpy(bootcore, lastcore_save.core_path);
+	}
+	else if( !strcmp( cfg.bootcore, "lastgame" ) )
+	{
+		launch_type = BOOTCORE_LASTGAME;
+		strcpy(bootcore, lastcore_save.core_path);
+	}
+	else if( !strcmp( cfg.bootcore, "lastexactgame" ) )
+	{
+		launch_type = BOOTCORE_LASTGAME_EXACT;
+		strcpy(bootcore, lastcore_save.core_path);
 	}
 	else if( isExactcoreName(cfg.bootcore) )
 	{
@@ -162,23 +234,35 @@ void bootcore_init(const char *path)
 	// if we are booting a core
 	if( path[0] != '\0' )
 	{
-		if( !is_menu() && ( launch_type == BOOTCORE_LASTCORE || launch_type == BOOTCORE_LASTCORE_EXACT ) )
+		if( !is_menu() && isLastCore( launch_type ) )
 		{
 			if( strcmp(path, bootcore) )
 			{
-				FileSaveConfig("lastcore.dat", (char*)path, strlen(path));
+				strcpy(lastcore_save.core_path, path);
+				
+				// Clear game path if the corename differs
+				if( strcmp( lastcore_save.core_name, CoreName ) )
+				{
+					strcpy( lastcore_save.core_name, CoreName );
+					lastcore_save.game_path[0] = '\0';
+				}
+				FileSaveConfig("lastcore.dat", &lastcore_save, sizeof(lastcore_save));
+			}
+			
+			if( lastcore_save.game_path[0] )
+			{
+				user_io_load_or_mount( lastcore_save.game_path );
 			}
 		}
-		launch_type = BOOTCORE_NONE;
 		return;
 	}
 
 	// clean up name
-	if( launch_type == BOOTCORE_LASTCORE_EXACT || launch_type == BOOTCORE_CORENAME_EXACT || isMraName(bootcore) )
+	if( isExact( launch_type ) || isMraName(bootcore) )
 	{
 		makeExactCoreName(bootcore);
 	}
-	else if( launch_type == BOOTCORE_LASTCORE )
+	else
 	{	
 		makeCoreName(bootcore);
 	}
@@ -186,7 +270,6 @@ void bootcore_init(const char *path)
 	// no valid bootcore
 	if( bootcore[0] == '\0' )
 	{
-		launch_type = BOOTCORE_NONE;
 		return;
 	}
 
@@ -194,7 +277,6 @@ void bootcore_init(const char *path)
 	char *found_path = findCore(getRootDir(), bootcore, 0);
 	if (found_path == NULL)
 	{
-		launch_type = BOOTCORE_NONE;
 		return;
 	}
 
@@ -216,17 +298,34 @@ void bootcore_init(const char *path)
 	if( cfg.bootcore_timeout )
 	{
 		launch_time = GetTimer(cfg.bootcore_timeout * 1000UL);
+		launch_pending = true;
 	}
 	else
 	{
 		launch_time = 0;
 		bootcore_launch();
-		launch_type = BOOTCORE_NONE;
 	}
+}
+
+void bootcore_record_file(const char *path)
+{
+	if( launch_type != BOOTCORE_LASTGAME && launch_type != BOOTCORE_LASTGAME_EXACT )
+	{
+		return;
+	}
+
+	if( strcmp( CoreName, lastcore_save.core_name ) )
+	{
+		return;
+	}
+
+	strncpy(lastcore_save.game_path, path, sizeof(lastcore_save.game_path));
+	FileSaveConfig("lastcore.dat", &lastcore_save, sizeof(lastcore_save));
 }
 
 void bootcore_launch()
 {
+	launch_pending = false;
 	if( isMraName(core_path) )
 	{
 		arcade_load(getFullPath(core_path));
@@ -239,7 +338,7 @@ void bootcore_launch()
 
 bool bootcore_pending()
 {
-	return launch_type != BOOTCORE_NONE;
+	return launch_pending;
 }
 
 bool bootcore_ready()

@@ -6,6 +6,7 @@
 #define __BOOTCORE_H__
 
 void bootcore_init(const char *path);
+void bootcore_record_file(const char *path);
 
 void bootcore_launch();
 bool bootcore_pending();
