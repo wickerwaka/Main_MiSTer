@@ -9,6 +9,7 @@
 #include "spi.h"
 
 struct fileZipArchive;
+struct PatchIO;
 
 struct fileTYPE
 {
@@ -22,6 +23,7 @@ struct fileTYPE
 	fileZipArchive *zip;
 	__off64_t       size;
 	__off64_t       offset;
+	PatchIO        *patch;
 	char            path[1024];
 	char            name[261];
 };
@@ -68,6 +70,7 @@ int  isUSBMounted();
 int  FileOpenZip(fileTYPE *file, const char *name, uint32_t crc32);
 int  FileOpenEx(fileTYPE *file, const char *name, int mode, char mute = 0, int use_zip = 1);
 int  FileOpen(fileTYPE *file, const char *name, char mute = 0);
+int  FileOpenPatch(fileTYPE *file, fileTYPE *source_file, const char *patch_path);
 void FileClose(fileTYPE *file);
 
 __off64_t FileGetSize(fileTYPE *file);

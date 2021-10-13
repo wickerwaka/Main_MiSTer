@@ -2070,22 +2070,30 @@ int user_io_file_tx_a(const char* name, uint16_t index)
 
 int user_io_file_tx(const char* name, unsigned char index, char opensave, char mute, char composite, uint32_t load_addr)
 {
-	fileTYPE f = {};
+	fileTYPE patch_file = {};
+	fileTYPE source_file = {};
+	fileTYPE *f = &source_file;
 	static uint8_t buf[4096];
 
-	if (!FileOpen(&f, name, mute)) return 0;
+	if (!FileOpen(&source_file, name, mute)) return 0;
 
-	unsigned long bytes2send = f.size;
+	if( strstr( name, "Super Mario World (USA).sfc" ) )
+	{
+		FileOpenPatch( &patch_file, &source_file, "/media/fat/The Ninji Saga.ips");
+		f = &patch_file;
+	}
+
+	unsigned long bytes2send = f->size;
 
 	if (composite)
 	{
-		if (!FileReadSec(&f, buf)) return 0;
+		if (!FileReadSec(f, buf)) return 0;
 		if (memcmp(buf, "MiSTer", 6)) return 0;
 
 		uint32_t off = 16 + *(uint32_t*)(((uint8_t*)buf) + 12);
 		bytes2send -= off;
 
-		FileSeek(&f, off, SEEK_SET);
+		FileSeek(f, off, SEEK_SET);
 	}
 
 	/* transmit the entire file using one transfer */
@@ -2095,8 +2103,8 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 	// set index byte (0=bios rom, 1-n=OSD entry index)
 	user_io_set_index(index);
 
-	int len = strlen(f.name);
-	char *p = f.name + len - 4;
+	int len = strlen(f->name);
+	char *p = f->name + len - 4;
 	user_io_file_info(p);
 
 	// prepare transmission of new file
@@ -2107,7 +2115,7 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 	int is_snes_bs = 0;
 	if (is_snes() && bytes2send)
 	{
-		const char *ext = strrchr(f.name, '.');
+		const char *ext = strrchr(f->name, '.');
 		if (ext && !strcasecmp(ext, ".BS")) {
 			is_snes_bs = 1;
 		}
@@ -2132,7 +2140,7 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 				if (bytes2send & 512)
 				{
 					bytes2send -= 512;
-					FileReadSec(&f, buf);
+					FileReadSec(f, buf);
 				}
 
 				uint32_t sz = fb.size;
@@ -2154,19 +2162,19 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 		}
 		else if ((index & 0x3F) == 1) {
 			printf("Load SPC ROM.\n");
-			FileReadSec(&f, buf);
+			FileReadSec(f, buf);
 			user_io_file_tx_data(buf, 256);
 
-			FileSeek(&f, (64*1024)+256, SEEK_SET);
-			FileReadSec(&f, buf);
+			FileSeek(f, (64*1024)+256, SEEK_SET);
+			FileReadSec(f, buf);
 			user_io_file_tx_data(buf, 256);
 
-			FileSeek(&f, 256, SEEK_SET);
+			FileSeek(f, 256, SEEK_SET);
 			bytes2send = 64 * 1024;
 		}
 		else {
 			printf("Load SNES ROM.\n");
-			uint8_t* buf = snes_get_header(&f);
+			uint8_t* buf = snes_get_header(f);
 			hexdump(buf, 16, 0);
 			user_io_file_tx_data(buf, 512);
 
@@ -2174,7 +2182,7 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 			if (bytes2send & 512)
 			{
 				bytes2send -= 512;
-				FileReadSec(&f, buf);
+				FileReadSec(f, buf);
 			}
 		}
 	}
@@ -2222,12 +2230,12 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 			while (bytes2send)
 			{
 				uint32_t chunk = (bytes2send > (256 * 1024)) ? (256 * 1024) : bytes2send;
-				FileReadAdv(&f, mem + size - bytes2send, chunk);
+				FileReadAdv(f, mem + size - bytes2send, chunk);
 
 				file_crc = crc32(file_crc, mem + skip + size - bytes2send, chunk - skip);
 				skip = 0;
 
-				if (use_progress) ProgressMessage("Loading", f.name, size - bytes2send, size);
+				if (use_progress) ProgressMessage("Loading", f->name, size - bytes2send, size);
 				bytes2send -= chunk;
 			}
 
@@ -2240,11 +2248,11 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 		{
 			uint32_t chunk = (bytes2send > sizeof(buf)) ? sizeof(buf) : bytes2send;
 
-			FileReadAdv(&f, buf, chunk);
-			if (is_snes() && is_snes_bs) snes_patch_bs_header(&f, buf);
+			FileReadAdv(f, buf, chunk);
+			if (is_snes() && is_snes_bs) snes_patch_bs_header(f, buf);
 			user_io_file_tx_data(buf, chunk);
 
-			if (use_progress) ProgressMessage("Loading", f.name, size - bytes2send, size);
+			if (use_progress) ProgressMessage("Loading", f->name, size - bytes2send, size);
 			bytes2send -= chunk;
 
 			if (skip >= chunk) skip -= chunk;
@@ -2262,7 +2270,8 @@ int user_io_file_tx(const char* name, unsigned char index, char opensave, char m
 	printf("Done.\n");
 	printf("CRC32: %08X\n", file_crc);
 
-	FileClose(&f);
+	FileClose(&patch_file);
+	FileClose(&source_file);
 
 	if (opensave)
 	{

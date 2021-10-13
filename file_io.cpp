@@ -29,6 +29,7 @@
 #include "scheduler.h"
 #include "video.h"
 #include "support.h"
+#include "patch_io.h"
 
 #define MIN(a,b) (((a)<(b)) ? (a) : (b))
 
@@ -51,6 +52,7 @@ fileTYPE::fileTYPE()
 	zip = 0;
 	size = 0;
 	offset = 0;
+	patch = 0;
 }
 
 fileTYPE::~fileTYPE()
@@ -219,6 +221,11 @@ static int isPathRegularFile(const char *path, int use_zip = 1)
 
 void FileClose(fileTYPE *file)
 {
+	if (file->patch)
+	{
+		delete file->patch;
+	}
+
 	if (file->zip)
 	{
 		if (file->zip->iter)
@@ -246,6 +253,7 @@ void FileClose(fileTYPE *file)
 
 	file->zip = nullptr;
 	file->filp = nullptr;
+	file->patch = nullptr;
 	file->size = 0;
 }
 
@@ -467,7 +475,7 @@ __off64_t FileGetSize(fileTYPE *file)
 
 		return st.st_size;
 	}
-	else if (file->zip)
+	else if (file->zip || file->patch)
 	{
 		return file->size;
 	}
@@ -477,6 +485,24 @@ __off64_t FileGetSize(fileTYPE *file)
 int FileOpen(fileTYPE *file, const char *name, char mute)
 {
 	return FileOpenEx(file, name, O_RDONLY, mute);
+}
+
+int  FileOpenPatch(fileTYPE *file, fileTYPE *source_file, const char *patch_path)
+{
+	FileClose(file);
+	file->mode = 0;
+	file->type = 0;
+	file->patch = new PatchIO();
+
+	PatchIO_Open(file->patch, source_file, patch_path);
+	
+	file->offset = 0;
+	file->size = PatchIO_GetTargetSize(file->patch);
+	
+	char *p = strrchr(full_path, '/');
+	strcpy(file->name, p );
+
+	return 0;
 }
 
 int FileSeek(fileTYPE *file, __off64_t offset, int origin)
@@ -531,6 +557,17 @@ int FileSeek(fileTYPE *file, __off64_t offset, int origin)
 			}
 		}
 	}
+	else if( file->patch )
+	{
+		if (origin == SEEK_CUR)
+		{
+			offset = file->offset + offset;
+		}
+		else if (origin == SEEK_END)
+		{
+			offset = file->size - offset;
+		}
+	}
 	else
 	{
 		return 0;
@@ -572,6 +609,15 @@ int FileReadAdv(fileTYPE *file, void *pBuffer, int length, int failres)
 		}
 		file->zip->offset += ret;
 	}
+	else if (file->patch)
+	{
+		ret = PatchIO_Read(file->patch, file->offset, length, pBuffer);
+		if (ret < 0)
+		{
+			printf( "PatchIO_Read failed with error %d.\n", ret);
+			return failres;
+		}
+	}
 	else
 	{
 		printf("FileReadAdv error(unknown file type).\n");
@@ -610,6 +656,11 @@ int FileWriteAdv(fileTYPE *file, void *pBuffer, int length, int failres)
 	else if (file->zip)
 	{
 		printf("FileWriteAdv error(not supported for zip).\n");
+		return failres;
+	}
+	else if (file->patch)
+	{
+		printf("FileWriteAdv error(not supported for patched files).\n");
 		return failres;
 	}
 	else
