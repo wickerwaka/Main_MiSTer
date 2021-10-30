@@ -52,6 +52,10 @@ as rotated copies of the first 128 entries.  -- AMR
 #define OSD_CMD_WRITE    0x20      // OSD write video data command
 #define OSD_CMD_ENABLE   0x41      // OSD enable command
 #define OSD_CMD_DISABLE  0x40      // OSD disable command
+#define OSD_CMD_PALETTE  0x60      // OSD palette
+#define OSD_CMD_TILEDATA 0x80      // OSD tile pixel data
+#define OSD_CMD_TILEMAP  0xc0      // OSD tile map
+
 
 static int osd_size = 8;
 
@@ -65,11 +69,143 @@ int OsdGetSize()
 	return osd_size;
 }
 
+//
+// TILES
+
+#define NUM_TILES 128
+#define TILE_MAP_WIDTH 32
+#define TILE_MAP_HEIGHT 32
+#define TILE_MAP_NUM_LAYERS 2
+#define TILE_PLANES 4
+static uint32_t tile_inuse_prev[NUM_TILE_BITS];
+static uint32_t tile_inuse[NUM_TILE_BITS];
+static uint8_t tile_to_char[NUM_TILES];
+static uint8_t char_to_tile[256];
+static uint8_t tile_data[NUM_TILES * 8 * TILE_PLANES];
+static uint16_t tile_map[TILE_MAP_WIDTH * TILE_MAP_HEIGHT * TILE_MAP_NUM_LAYERS];
+static uint16_t tile_palette[32];
+static uint16_t default_tile_palette[32] = {
+	0x000, 0xeff, 0xeff, 0x000, 0x000, 0x344, 0xeff, 0x344,
+	0x000, 0x546, 0x676, 0xd75, 0x59d, 0x6b6, 0xec7, 0xeff,
+	0xeff, 0xec7, 0x6b6, 0x59d, 0xd75, 0x676, 0x546, 0x000,
+	0x000, 0x000, 0xfff, 0x811, 0x130, 0xda3, 0xbd5, 0x788,
+//	0x788, 0x000, 0xfff, 0x811, 0x130, 0xda3, 0xbd5, 0x000
+};
+static bool palette_dirty;
+
+void TileInit()
+{
+	static bool inited = false;
+
+	if( !inited )
+	{
+		inited = true;
+		memset( tile_inuse, 0, sizeof( tile_inuse ) );
+		memset( char_to_tile, 0xff, sizeof( char_to_tile ) );
+		memset( tile_to_char, 0, sizeof( tile_to_char ) );
+		tile_inuse[0] = 1;
+		memcpy(tile_palette, default_tile_palette, sizeof(default_tile_palette));
+		palette_dirty = true;
+	}
+}
+
+static uint8_t FindFreeTile()
+{
+	for( int idx = 0; idx < NUM_TILE_BITS; idx++ )
+	{
+		if( tile_inuse[idx] == 0xffffffff )
+			continue;
+
+		uint32_t bit = 31 - __builtin_clz(~tile_inuse[idx]);
+		uint8_t tile_idx = ( idx * 32 ) + bit;
+		tile_inuse[idx] |= 1 << bit;
+		if( tile_to_char[tile_idx] )
+		{
+			char_to_tile[tile_to_char[tile_idx]] = 0xff;
+			tile_to_char[tile_idx] = 0;
+		}
+
+		return tile_idx;
+	}
+
+	return 0;
+}
+
+static uint8_t CharToTile( int c )
+{
+	if( char_to_tile[c] != 0xff )
+	{
+		uint8_t tile_idx = char_to_tile[c];
+		tile_inuse[tile_idx / 32] |= 1 << (tile_idx % 32);
+		return char_to_tile[c];
+	}
+
+	uint8_t tile_idx = FindFreeTile();
+	tile_to_char[tile_idx] = (uint8_t)c;
+	char_to_tile[c] = tile_idx;
+
+	uint8_t *p = &charfont[c][0];
+	uint8_t *t = &tile_data[tile_idx * 8];
+	for( int x = 0; x < 8; x++ )
+	{
+		uint8_t row = 0;
+		for( int y = 0; y < 8; y++ )
+		{
+			if( p[y] & ( 1 << x ) )
+				row |= 1 << y;
+		}
+		t[x] = row;
+	}
+
+	return tile_idx;
+}
+
+static void SetTile( int x, int y, int layer, int palette, uint8_t tile_idx )
+{
+	if( x < 0 || x >= TILE_MAP_WIDTH )
+		return;
+
+	if( y < 0 || y >= TILE_MAP_HEIGHT )
+		return;
+
+	if( layer < 0 || layer >= TILE_MAP_NUM_LAYERS )
+		return;
+	
+	int pos = x + ( y * TILE_MAP_WIDTH ) + ( layer * TILE_MAP_WIDTH * TILE_MAP_HEIGHT );
+	tile_map[pos] = ( 1 << 15 ) | ( ( palette & 7 ) << 10 ) | ( 3 << 7 ) | ( tile_idx & 0x7f );
+}
+
+static void ClearTileRow( int y, int layer, int palette )
+{
+	if( y < 0 || y >= TILE_MAP_HEIGHT )
+		return;
+
+	if( layer < 0 || layer >= TILE_MAP_NUM_LAYERS )
+		return;
+	
+	int pos = ( y * TILE_MAP_WIDTH ) + ( layer * TILE_MAP_WIDTH * TILE_MAP_HEIGHT );
+	for( int x = 0; x < TILE_MAP_WIDTH; x++ )
+		tile_map[pos + x] = ( 1 << 15 ) | ( ( palette & 7 ) << 10 );
+}
+
+static void ClearTileLayer( int layer, int palette )
+{
+	if( layer < 0 || layer >= TILE_MAP_NUM_LAYERS )
+		return;
+	
+	for( int y = 0; y < TILE_MAP_HEIGHT; y++ )
+		ClearTileRow( y, layer, palette );
+}
+
+//
+//
+
 struct star
 {
 	int x, y;
 	int dx, dy;
 };
+
 
 struct star stars[64];
 static uint8_t osdbuf[256 * 32];
@@ -219,6 +355,7 @@ static void osd_start(int line)
 	line = line & 0x1F;
 	osdset |= 1 << line;
 	osdbufpos = line * 256;
+	ClearTileRow(line, 0, 0);
 }
 
 static void draw_title(const unsigned char *p)
@@ -252,6 +389,7 @@ void OsdWriteOffset(unsigned char n, const char *s, unsigned char invert, unsign
 	unsigned char stipplemask = 0xff;
 	int linelimit = OSDLINELEN;
 	int arrowmask = arrow;
+	int palette = 0;
 	if (n == (osd_size-1) && (arrow & OSD_ARROW_RIGHT))
 		linelimit -= 22;
 
@@ -260,6 +398,7 @@ void OsdWriteOffset(unsigned char n, const char *s, unsigned char invert, unsign
 	if (stipple) {
 		stipplemask = 0x55;
 		stipple = 0xff;
+		palette |= 0x2;
 	}
 	else
 		stipple = 0;
@@ -273,8 +412,17 @@ void OsdWriteOffset(unsigned char n, const char *s, unsigned char invert, unsign
 	// send all characters in string to OSD
 	while (1)
 	{
-		if (invert && i / 8 >= mininv) xormask = 255;
-		if (invert && i / 8 >= maxinv) xormask = 0;
+		if (invert && i / 8 >= mininv)
+		{
+			xormask = 255;
+			palette |= 0x1;
+		}
+
+		if (invert && i / 8 >= maxinv)
+		{
+			xormask = 0;
+			palette &= ~0x1;
+		}
 
 		if (i == 0 && (n < osd_size))
 		{	// Render sidestripe
@@ -312,6 +460,9 @@ void OsdWriteOffset(unsigned char n, const char *s, unsigned char invert, unsign
 			osdbuf[osdbufpos++] = xormask;
 			osdbuf[osdbufpos++] = xormask;
 
+			SetTile( i / 8, n, 0, palette, CharToTile(0x10) );
+			SetTile( ( i / 8 ) + 1, n, 0, palette, CharToTile(0x14) );
+
 			i += 24;
 			arrowmask &= ~OSD_ARROW_LEFT;
 			if (*s++ == 0) break;	// Skip 3 characters, to keep alignent the same.
@@ -345,6 +496,7 @@ void OsdWriteOffset(unsigned char n, const char *s, unsigned char invert, unsign
 			{  // normal character
 				unsigned char c;
 				p = &charfont[b][0];
+				SetTile(i / 8, n, 0, palette, CharToTile(b));
 				for (c = 0; c<8; c++) {
 					char bg = usebg ? framebuffer[n][i+c-22] : 0;
 					osdbuf[osdbufpos++] = (((*p++ << offset)&stipplemask) ^ xormask ^ xorchar) | bg;
@@ -374,6 +526,10 @@ void OsdWriteOffset(unsigned char n, const char *s, unsigned char invert, unsign
 		osdbuf[osdbufpos++] = xormask;
 		osdbuf[osdbufpos++] = xormask;
 		osdbuf[osdbufpos++] = xormask;
+
+		SetTile( i / 8, n, 0, palette, CharToTile(0x15) );
+		SetTile( ( i / 8 ) + 1, n, 0, palette, CharToTile(0x11) );
+
 		i += 22;
 	}
 }
@@ -484,7 +640,12 @@ void OSD_PrintInfo(const char *message, int *width, int *height, int frame)
 		for (x = 0; x < w; x++)
 		{
 			const unsigned char *p = charfont[(uint)str[(y*INFO_MAXW) + x]];
-			for (int i = 0; i < 8; i++) osdbuf[osdbufpos++] = *p++;
+			for (int i = 0; i < 8; i++)
+			{
+				osdbuf[osdbufpos++] = *p;
+				SetTile(x, y, 0, 0, CharToTile(*p));
+				p++;
+			}
 		}
 	}
 }
@@ -494,6 +655,8 @@ void OsdClear(void)
 {
 	osdset = -1;
 	memset(osdbuf, 0, 16 * 256);
+	ClearTileLayer(0, 0);
+	ClearTileLayer(1, 0);
 }
 
 // enable displaying of OSD
@@ -661,6 +824,8 @@ char* OsdCoreNameGet()
 
 void OsdUpdate()
 {
+	TileInit();
+
 	int n = is_menu() ? 19 : osd_size;
 	for (int i = 0; i < n; i++)
 	{
@@ -674,5 +839,45 @@ void OsdUpdate()
 		}
 	}
 
+	if( palette_dirty )
+	{
+		spi_osd_cmd_cont(OSD_CMD_PALETTE);
+		spi_write( (uint8_t *)tile_palette, sizeof(tile_palette), 1);
+		DisableOsd();
+		palette_dirty = false;
+	}
+
+/*	const char *str = "Hello World!";
+
+	const char *p = str;
+	int idx = 0;
+	while( *p )
+	{
+		tile_map[idx] = CharToTile( *p );
+		p++;
+		idx++;
+	}
+*/
+	spi_osd_cmd_cont(OSD_CMD_TILEDATA);
+	spi_w( 0 );
+	spi_write( tile_data, sizeof(tile_data), 0);
+	DisableOsd();
+
+	memset( tile_inuse_prev, 0, sizeof( tile_inuse_prev ) );
+	for( int pos = 0; pos < ( TILE_MAP_HEIGHT * TILE_MAP_WIDTH * TILE_MAP_NUM_LAYERS ); pos++ )
+	{
+		const uint16_t tile = tile_map[pos];
+		const uint8_t tile_idx = tile & 0x7f;
+		tile_inuse_prev[ tile_idx >> 5 ] |= tile_idx & 0x1f;
+		if( tile & ( 1 << 15 ) )
+		{
+			EnableOsd();
+			spi_b(OSD_CMD_TILEMAP);
+			spi_w(pos);
+			spi_w(tile);
+			DisableOsd();
+			tile_map[pos] &= ~( 1 << 15 );
+		}
+	}
 	osdset = 0;
 }
