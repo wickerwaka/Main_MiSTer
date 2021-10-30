@@ -1152,15 +1152,15 @@ int get_map_cancel()
 static char *get_map_name(int dev, int def)
 {
 	static char name[128];
-	if (def || is_menu()) sprintf(name, "input_%s%s_v3.map", input[dev].idstr, input[dev].mod ? "_m" : "");
-	else sprintf(name, "%s_input_%s%s_v3.map", user_io_get_core_name(), input[dev].idstr, input[dev].mod ? "_m" : "");
+	if (def || is_menu()) snprintf(name, sizeof(name), "input_%s%s_v3.map", input[dev].idstr, input[dev].mod ? "_m" : "");
+	else snprintf(name, sizeof(name), "%s_input_%s%s_v3.map", user_io_get_core_name(), input[dev].idstr, input[dev].mod ? "_m" : "");
 	return name;
 }
 
 static char *get_kbdmap_name(int dev)
 {
 	static char name[128];
-	sprintf(name, "kbd_%s.map", input[dev].idstr);
+	snprintf(name, sizeof(name), "kbd_%s.map", input[dev].idstr);
 	return name;
 }
 

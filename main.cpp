@@ -33,6 +33,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "scheduler.h"
 #include "osd.h"
 
+#include "patch_io.h"
+
 const char *version = "$VER:" VDATE;
 
 int main(int argc, char *argv[])
@@ -48,6 +50,23 @@ int main(int argc, char *argv[])
 	fpga_io_init();
 
 	DISKLED_OFF;
+
+	fileTYPE patch_file = {};
+	fileTYPE source_file = {};
+	FileOpen( &source_file, "/media/fat/games/SNES/Super Mario World (USA).sfc" );
+	FileOpenPatch( &patch_file, &source_file, "/media/fat/The Ninji Saga.ips");
+
+	fileTYPE output_file;
+	FileOpenEx( &output_file, "/tmp/patched.bin", O_CREAT | O_TRUNC | O_RDWR | O_SYNC );
+	static char foof[1024];
+	uint32_t offset = 0;
+	while( offset < patch_file.size )
+	{
+		int len = FileReadAdv(&patch_file, foof, 1024);
+		FileWriteAdv( &output_file, foof, len);
+		offset += len;
+	}
+	FileClose( &output_file );
 
 	printf("\nMinimig by Dennis van Weeren");
 	printf("\nARM Controller by Jakub Bednarski");
