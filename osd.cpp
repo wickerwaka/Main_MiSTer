@@ -42,6 +42,7 @@ as rotated copies of the first 128 entries.  -- AMR
 #include "spi.h"
 
 #include "charrom.h"
+#include "tiles.h"
 #include "logo.h"
 #include "user_io.h"
 #include "hardware.h"
@@ -52,10 +53,6 @@ as rotated copies of the first 128 entries.  -- AMR
 #define OSD_CMD_WRITE    0x20      // OSD write video data command
 #define OSD_CMD_ENABLE   0x41      // OSD enable command
 #define OSD_CMD_DISABLE  0x40      // OSD disable command
-#define OSD_CMD_PALETTE  0x60      // OSD palette
-#define OSD_CMD_TILEDATA 0x80      // OSD tile pixel data
-#define OSD_CMD_TILEMAP  0xc0      // OSD tile map
-
 
 static int osd_size = 8;
 
@@ -67,134 +64,6 @@ void OsdSetSize(int n)
 int OsdGetSize()
 {
 	return osd_size;
-}
-
-//
-// TILES
-
-#define NUM_TILES 128
-#define TILE_MAP_WIDTH 32
-#define TILE_MAP_HEIGHT 32
-#define TILE_MAP_NUM_LAYERS 2
-#define TILE_PLANES 4
-static uint32_t tile_inuse_prev[NUM_TILE_BITS];
-static uint32_t tile_inuse[NUM_TILE_BITS];
-static uint8_t tile_to_char[NUM_TILES];
-static uint8_t char_to_tile[256];
-static uint8_t tile_data[NUM_TILES * 8 * TILE_PLANES];
-static uint16_t tile_map[TILE_MAP_WIDTH * TILE_MAP_HEIGHT * TILE_MAP_NUM_LAYERS];
-static uint16_t tile_palette[32];
-static uint16_t default_tile_palette[32] = {
-	0x000, 0xeff, 0xeff, 0x000, 0x000, 0x344, 0xeff, 0x344,
-	0x000, 0x546, 0x676, 0xd75, 0x59d, 0x6b6, 0xec7, 0xeff,
-	0xeff, 0xec7, 0x6b6, 0x59d, 0xd75, 0x676, 0x546, 0x000,
-	0x000, 0x000, 0xfff, 0x811, 0x130, 0xda3, 0xbd5, 0x788,
-//	0x788, 0x000, 0xfff, 0x811, 0x130, 0xda3, 0xbd5, 0x000
-};
-static bool palette_dirty;
-
-void TileInit()
-{
-	static bool inited = false;
-
-	if( !inited )
-	{
-		inited = true;
-		memset( tile_inuse, 0, sizeof( tile_inuse ) );
-		memset( char_to_tile, 0xff, sizeof( char_to_tile ) );
-		memset( tile_to_char, 0, sizeof( tile_to_char ) );
-		tile_inuse[0] = 1;
-		memcpy(tile_palette, default_tile_palette, sizeof(default_tile_palette));
-		palette_dirty = true;
-	}
-}
-
-static uint8_t FindFreeTile()
-{
-	for( int idx = 0; idx < NUM_TILE_BITS; idx++ )
-	{
-		if( tile_inuse[idx] == 0xffffffff )
-			continue;
-
-		uint32_t bit = 31 - __builtin_clz(~tile_inuse[idx]);
-		uint8_t tile_idx = ( idx * 32 ) + bit;
-		tile_inuse[idx] |= 1 << bit;
-		if( tile_to_char[tile_idx] )
-		{
-			char_to_tile[tile_to_char[tile_idx]] = 0xff;
-			tile_to_char[tile_idx] = 0;
-		}
-
-		return tile_idx;
-	}
-
-	return 0;
-}
-
-static uint8_t CharToTile( int c )
-{
-	if( char_to_tile[c] != 0xff )
-	{
-		uint8_t tile_idx = char_to_tile[c];
-		tile_inuse[tile_idx / 32] |= 1 << (tile_idx % 32);
-		return char_to_tile[c];
-	}
-
-	uint8_t tile_idx = FindFreeTile();
-	tile_to_char[tile_idx] = (uint8_t)c;
-	char_to_tile[c] = tile_idx;
-
-	uint8_t *p = &charfont[c][0];
-	uint8_t *t = &tile_data[tile_idx * 8];
-	for( int x = 0; x < 8; x++ )
-	{
-		uint8_t row = 0;
-		for( int y = 0; y < 8; y++ )
-		{
-			if( p[y] & ( 1 << x ) )
-				row |= 1 << y;
-		}
-		t[x] = row;
-	}
-
-	return tile_idx;
-}
-
-static void SetTile( int x, int y, int layer, int palette, uint8_t tile_idx )
-{
-	if( x < 0 || x >= TILE_MAP_WIDTH )
-		return;
-
-	if( y < 0 || y >= TILE_MAP_HEIGHT )
-		return;
-
-	if( layer < 0 || layer >= TILE_MAP_NUM_LAYERS )
-		return;
-	
-	int pos = x + ( y * TILE_MAP_WIDTH ) + ( layer * TILE_MAP_WIDTH * TILE_MAP_HEIGHT );
-	tile_map[pos] = ( 1 << 15 ) | ( ( palette & 7 ) << 10 ) | ( 3 << 7 ) | ( tile_idx & 0x7f );
-}
-
-static void ClearTileRow( int y, int layer, int palette )
-{
-	if( y < 0 || y >= TILE_MAP_HEIGHT )
-		return;
-
-	if( layer < 0 || layer >= TILE_MAP_NUM_LAYERS )
-		return;
-	
-	int pos = ( y * TILE_MAP_WIDTH ) + ( layer * TILE_MAP_WIDTH * TILE_MAP_HEIGHT );
-	for( int x = 0; x < TILE_MAP_WIDTH; x++ )
-		tile_map[pos + x] = ( 1 << 15 ) | ( ( palette & 7 ) << 10 );
-}
-
-static void ClearTileLayer( int layer, int palette )
-{
-	if( layer < 0 || layer >= TILE_MAP_NUM_LAYERS )
-		return;
-	
-	for( int y = 0; y < TILE_MAP_HEIGHT; y++ )
-		ClearTileRow( y, layer, palette );
 }
 
 //
@@ -265,7 +134,6 @@ static unsigned long scroll_offset[2] = {}; // file/dir name scrolling position
 static unsigned long scroll_timer[2] = {};  // file/dir name scrolling timer
 
 static int arrow;
-static unsigned char titlebuffer[256];
 
 static void rotatechar(unsigned char *in, unsigned char *out)
 {
@@ -286,8 +154,17 @@ static void rotatechar(unsigned char *in, unsigned char *out)
 
 #define OSDHEIGHT (uint)(osd_size*8)
 
-void OsdSetTitle(const char *s, int a)
+uint8_t reverse_bits(uint8_t b)
 {
+   b = (b & 0xF0) >> 4 | (b & 0x0F) << 4;
+   b = (b & 0xCC) >> 2 | (b & 0x33) << 2;
+   b = (b & 0xAA) >> 1 | (b & 0x55) << 1;
+   return b;
+}
+
+void OsdSetTitle(const char *s, int a)
+{/*
+	uint8_t *titlebuffer = &tile_data[0][64 * 8];
 	// Compose the title, condensing character gaps
 	arrow = a;
 	int zeros = 0;
@@ -305,39 +182,37 @@ void OsdSetTitle(const char *s, int a)
 				if (nc)
 				{
 					zeros = 0;
-					titlebuffer[outp++] = nc;
+					titlebuffer[outp++] = reverse_bits(nc) ^ 255;
 				}
 				else if (zeros == 0 || (c == ' ' && zeros < 5))
 				{
-					titlebuffer[outp++] = 0;
+					titlebuffer[outp++] = 255;
 					zeros++;
 				}
-				if (outp>sizeof(titlebuffer)) break;
+				if (outp>256) break;
 			}
 		}
 		else break;
 	}
 	for (i = outp; i<OSDHEIGHT; i++)
 	{
-		titlebuffer[i] = 0;
+		titlebuffer[i] = 255;
 	}
 
 	// Now centre it:
 	uint c = (OSDHEIGHT - 1 - outp) / 2;
 	memmove(titlebuffer + c, titlebuffer, outp);
 
-	for (i = 0; i<c; ++i) titlebuffer[i] = 0;
+	for (i = 0; i<c; ++i) titlebuffer[i] = 255;
 
 	// Finally rotate it.
-	for (i = 0; i<OSDHEIGHT; i += 8)
+	for (i = 0; i<osd_size; i++)
 	{
-		unsigned char tmp[8];
-		rotatechar(&titlebuffer[i], tmp);
-		for (c = 0; c<8; ++c)
-		{
-			titlebuffer[i + c] = tmp[c];
-		}
-	}
+		TileRef ref;
+		ref.plane = TILE_PLANE_0;
+		ref.tile_idx = i + 64;
+		SetTile(0, i, 1, 0, ref);
+	}*/
 }
 
 void OsdSetArrow(int a)
@@ -355,7 +230,7 @@ static void osd_start(int line)
 	line = line & 0x1F;
 	osdset |= 1 << line;
 	osdbufpos = line * 256;
-	ClearTileRow(line, 0, 0);
+	Tiles_ClearRow(line, 0, 0);
 }
 
 static void draw_title(const unsigned char *p)
@@ -398,7 +273,7 @@ void OsdWriteOffset(unsigned char n, const char *s, unsigned char invert, unsign
 	if (stipple) {
 		stipplemask = 0x55;
 		stipple = 0xff;
-		palette |= 0x2;
+		palette |= 0x1;
 	}
 	else
 		stipple = 0;
@@ -415,13 +290,13 @@ void OsdWriteOffset(unsigned char n, const char *s, unsigned char invert, unsign
 		if (invert && i / 8 >= mininv)
 		{
 			xormask = 255;
-			palette |= 0x1;
+			palette |= 0x4;
 		}
 
 		if (invert && i / 8 >= maxinv)
 		{
 			xormask = 0;
-			palette &= ~0x1;
+			palette &= ~0x4;
 		}
 
 		if (i == 0 && (n < osd_size))
@@ -437,10 +312,10 @@ void OsdWriteOffset(unsigned char n, const char *s, unsigned char invert, unsign
 			}
 			else
 			{
-				p = &titlebuffer[(osd_size - 1 - n) * 8];
+				//p = &titlebuffer[(osd_size - 1 - n) * 8];
 			}
 
-			draw_title(p);
+			//draw_title(p);
 			i += 22;
 		}
 		else if (n == (osd_size-1) && (arrowmask & OSD_ARROW_LEFT))
@@ -460,8 +335,8 @@ void OsdWriteOffset(unsigned char n, const char *s, unsigned char invert, unsign
 			osdbuf[osdbufpos++] = xormask;
 			osdbuf[osdbufpos++] = xormask;
 
-			SetTile( i / 8, n, 0, palette, CharToTile(0x10) );
-			SetTile( ( i / 8 ) + 1, n, 0, palette, CharToTile(0x14) );
+			Tiles_SetTile( i / 8, n, 0, palette, Tiles_CharRef(0x10) );
+			Tiles_SetTile( ( i / 8 ) + 1, n, 0, palette, Tiles_CharRef(0x14) );
 
 			i += 24;
 			arrowmask &= ~OSD_ARROW_LEFT;
@@ -496,7 +371,7 @@ void OsdWriteOffset(unsigned char n, const char *s, unsigned char invert, unsign
 			{  // normal character
 				unsigned char c;
 				p = &charfont[b][0];
-				SetTile(i / 8, n, 0, palette, CharToTile(b));
+				Tiles_SetTile(i / 8, n, 0, palette, Tiles_CharRef(b));
 				for (c = 0; c<8; c++) {
 					char bg = usebg ? framebuffer[n][i+c-22] : 0;
 					osdbuf[osdbufpos++] = (((*p++ << offset)&stipplemask) ^ xormask ^ xorchar) | bg;
@@ -527,8 +402,8 @@ void OsdWriteOffset(unsigned char n, const char *s, unsigned char invert, unsign
 		osdbuf[osdbufpos++] = xormask;
 		osdbuf[osdbufpos++] = xormask;
 
-		SetTile( i / 8, n, 0, palette, CharToTile(0x15) );
-		SetTile( ( i / 8 ) + 1, n, 0, palette, CharToTile(0x11) );
+		Tiles_SetTile( i / 8, n, 0, palette, Tiles_CharRef(0x15) );
+		Tiles_SetTile( ( i / 8 ) + 1, n, 0, palette, Tiles_CharRef(0x11) );
 
 		i += 22;
 	}
@@ -559,7 +434,7 @@ void OsdDrawLogo(int row)
 	{
 		if (i == 0)
 		{
-			draw_title(&titlebuffer[(osd_size - 1 - row) * 8]);
+			//draw_title(&titlebuffer[(osd_size - 1 - row) * 8]);
 			i += 22;
 		}
 
@@ -643,7 +518,7 @@ void OSD_PrintInfo(const char *message, int *width, int *height, int frame)
 			for (int i = 0; i < 8; i++)
 			{
 				osdbuf[osdbufpos++] = *p;
-				SetTile(x, y, 0, 0, CharToTile(*p));
+				Tiles_SetTile(x, y, 0, 0, Tiles_CharRef(*p));
 				p++;
 			}
 		}
@@ -655,8 +530,8 @@ void OsdClear(void)
 {
 	osdset = -1;
 	memset(osdbuf, 0, 16 * 256);
-	ClearTileLayer(0, 0);
-	ClearTileLayer(1, 0);
+	Tiles_ClearLayer(0, 0);
+	Tiles_ClearLayer(1, 0);
 }
 
 // enable displaying of OSD
@@ -725,7 +600,7 @@ static void print_line(unsigned char line, const char *hdr, const char *text, un
 
 	// select buffer and line to write to
 	osd_start(line);
-	draw_title(&titlebuffer[(osd_size - 1 - line) * 8]);
+	//draw_title(&titlebuffer[(osd_size - 1 - line) * 8]);
 
 	while (*hdr)
 	{
@@ -824,7 +699,7 @@ char* OsdCoreNameGet()
 
 void OsdUpdate()
 {
-	TileInit();
+	Tiles_Init();
 
 	int n = is_menu() ? 19 : osd_size;
 	for (int i = 0; i < n; i++)
@@ -839,45 +714,7 @@ void OsdUpdate()
 		}
 	}
 
-	if( palette_dirty )
-	{
-		spi_osd_cmd_cont(OSD_CMD_PALETTE);
-		spi_write( (uint8_t *)tile_palette, sizeof(tile_palette), 1);
-		DisableOsd();
-		palette_dirty = false;
-	}
+	Tiles_Update();
 
-/*	const char *str = "Hello World!";
-
-	const char *p = str;
-	int idx = 0;
-	while( *p )
-	{
-		tile_map[idx] = CharToTile( *p );
-		p++;
-		idx++;
-	}
-*/
-	spi_osd_cmd_cont(OSD_CMD_TILEDATA);
-	spi_w( 0 );
-	spi_write( tile_data, sizeof(tile_data), 0);
-	DisableOsd();
-
-	memset( tile_inuse_prev, 0, sizeof( tile_inuse_prev ) );
-	for( int pos = 0; pos < ( TILE_MAP_HEIGHT * TILE_MAP_WIDTH * TILE_MAP_NUM_LAYERS ); pos++ )
-	{
-		const uint16_t tile = tile_map[pos];
-		const uint8_t tile_idx = tile & 0x7f;
-		tile_inuse_prev[ tile_idx >> 5 ] |= tile_idx & 0x1f;
-		if( tile & ( 1 << 15 ) )
-		{
-			EnableOsd();
-			spi_b(OSD_CMD_TILEMAP);
-			spi_w(pos);
-			spi_w(tile);
-			DisableOsd();
-			tile_map[pos] &= ~( 1 << 15 );
-		}
-	}
 	osdset = 0;
 }

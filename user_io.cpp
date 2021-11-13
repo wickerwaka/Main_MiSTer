@@ -180,6 +180,8 @@ char is_arcade()
 static int is_menu_type = 0;
 char is_menu()
 {
+	return 1;
+	
 	if (!is_menu_type) is_menu_type = strcasecmp(core_name, "MENU") ? 2 : 1;
 	return (is_menu_type == 1);
 }
