@@ -1265,7 +1265,7 @@ int ScanDirectory(char* path, int mode, const char *extension, int options, cons
 	static char file_name[1024];
 	static char full_path[1024];
 
- 	int has_trd = 0;
+	int has_trd = 0;
 	const char *ext = extension;
 	while (*ext)
 	{

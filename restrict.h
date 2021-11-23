@@ -5,9 +5,9 @@
 
 enum class RestrictOverride
 {
-    None,
-    Restricted,
-    Allowed
+	None,
+	Restricted,
+	Allowed
 };
 
 void Restrict_Init(const char *config, const char *code);
@@ -18,6 +18,8 @@ bool Restrict_Cores();
 bool Restrict_Unlock();
 bool Restrict_Cheats();
 bool Restrict_DIPSwitches();
+bool Restrict_Volume();
+bool Restrict_Mapping();
 
 bool Restrict_Options( RestrictOverride override );
 bool Restrict_Toggle( RestrictOverride override );

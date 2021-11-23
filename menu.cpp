@@ -1511,7 +1511,7 @@ void HandleUI(void)
 			menustate = MENU_COMMON1;
 			menusub = 0;
 		}
-		else if (left && !Restrict_Settings())
+		else if (left)
 		{
 			menustate = MENU_MISC1;
 			menusub = 3;
@@ -1831,7 +1831,7 @@ void HandleUI(void)
 			// exit row
 			if (!page)
 			{
-				MenuWriteEntry(entry, STD_EXIT, selentry, true, OSD_ARROW_RIGHT | ( Restrict_Settings() ? 0 : OSD_ARROW_LEFT ));
+				MenuWriteEntry(entry, STD_EXIT, selentry, true, OSD_ARROW_RIGHT | OSD_ARROW_LEFT );
 			}
 			else
 			{
@@ -2303,18 +2303,17 @@ void HandleUI(void)
 				if (!menusub) firstmenu = 0;
 				adjvisible = 0;
 
-				MenuWrite(n++, " Core                      \x16", menusub == 0, 0);
+				MenuWriteEntry(n++, " Core                      \x16", 0, !Restrict_Cores());
 				MenuWrite(n++);
 				sprintf(s, " Define %s buttons         ", is_menu() ? "System" : user_io_get_core_name());
 				s[27] = '\x16';
 				s[28] = 0;
-				MenuWriteEntry(n++, s, 1, !Restrict_Settings());
-				MenuWriteEntry(n++, " Button/Key remap for game \x16", 2, !Restrict_Settings());
+				MenuWriteEntry(n++, s, 1, !Restrict_Mapping());
+				MenuWriteEntry(n++, " Button/Key remap for game \x16", 2, !Restrict_Mapping());
 				MenuWriteEntry(n++, " Reset player assignment", 3);
 
 				if (user_io_get_uart_mode())
 				{
-					menumask |= 0x10;
 					MenuWrite(n++);
 					int mode = GetUARTMode();
 					const char *p = config_uart_msg[mode];
@@ -2363,7 +2362,7 @@ void HandleUI(void)
 				{
 					MenuWrite(n++);
 					sprintf(s, " Audio filter - %s", config_afilter_msg[audio_filter_en() ? 1 : 0]);
-					MenuWrite(n++, s, menusub == 9);
+					MenuWriteEntry(n++, s, 9, !Restrict_Settings());
 
 					memset(s, 0, sizeof(s));
 					s[0] = ' ';
@@ -3003,7 +3002,7 @@ void HandleUI(void)
 	case MENU_SFONT_FILE_SELECTED:
 		{
 			printf("MENU_SFONT_FILE_SELECTED --> '%s'\n", selPath);
-			sprintf(Selected_tmp, "/sbin/mlinkutil FSSFONT /media/fat/\"%s\"", selPath);
+			snprintf(Selected_tmp, sizeof(Selected_tmp), "/sbin/mlinkutil FSSFONT /media/fat/\"%s\"", selPath);
 			system(Selected_tmp);
 			AdjustDirectory(selPath);
 			// MENU_FILE_SELECT1 to file select OSD
@@ -3136,9 +3135,17 @@ void HandleUI(void)
 		if (parentstate != MENU_MISC1)
 		{
 			for (int i = 0; i < OsdGetSize() - 1; i++) OsdWrite(i, "", 0, 0);
-			flag = 1;
-			for (int i = 1; i < 4; i++) if (FileExists(cfg_get_name(i))) flag |= 1 << i;
-			flag |= altcfg() << 4;
+
+			if( Restrict_Settings() )
+			{
+				flag = ( altcfg() << 4 ) | ( 1 << altcfg() );
+			}
+			else
+			{
+				flag = 1;
+				for (int i = 1; i < 4; i++) if (FileExists(cfg_get_name(i))) flag |= 1 << i;
+				flag |= altcfg() << 4;
+			}
 			menusub = 3;
 		}
 		parentstate = MENU_MISC1;
@@ -3172,7 +3179,7 @@ void HandleUI(void)
 			memset(bar, 0x8C, 8);
 			memset(bar, 0x7f, 8 - m);
 		}
-		OsdWrite(12, s, menusub == 1);
+		OsdWrite(12, s, menusub == 1, Restrict_Volume());
 
 		m = get_volume();
 		strcpy(s, "   Global Volume: ");
@@ -3188,7 +3195,7 @@ void HandleUI(void)
 			memset(bar, 0x8C, 8 - vol);
 			memset(bar, 0x7f, 8 - vol - m);
 		}
-		OsdWrite(13, s, menusub == 2);
+		OsdWrite(13, s, menusub == 2, Restrict_Volume());
 
 		OsdWrite(15, STD_EXIT, menusub == 3, 0, OSD_ARROW_RIGHT);
 		break;
@@ -3200,7 +3207,7 @@ void HandleUI(void)
 			menustate = MENU_NONE1;
 			break;
 		}
-		else if (menusub == 0 && (right || left || minus || plus || select))
+		else if (menusub == 0 && (right || left || minus || plus || select) && !Restrict_Volume())
 		{
 			uint8_t i = flag >> 4;
 			if (select)
@@ -3219,12 +3226,12 @@ void HandleUI(void)
 			}
 			menustate = MENU_MISC1;
 		}
-		else if(menusub == 1 && (right || left || minus || plus))
+		else if(menusub == 1 && (right || left || minus || plus) && !Restrict_Volume())
 		{
 			set_core_volume((right || plus) ? 1 : -1);
 			menustate = MENU_MISC1;
 		}
-		else if (menusub == 2 && (right || left || minus || plus || select))
+		else if (menusub == 2 && (right || left || minus || plus || select) && !Restrict_Volume())
 		{
 			set_volume((right || plus) ? 1 : (left || minus) ? -1 : 0);
 			menustate = MENU_MISC1;
@@ -3741,7 +3748,7 @@ void HandleUI(void)
 			menustate = MENU_COMMON1;
 			menusub = 0;
 		}
-		else if (left && !Restrict_Settings())
+		else if (left)
 		{
 			menustate = MENU_MISC1;
 			menusub = 3;
@@ -5773,7 +5780,7 @@ void HandleUI(void)
 		parentstate = menustate;
 
 		m = 0;
-		OsdSetTitle("System Settings", Restrict_Settings() ? 0 : OSD_ARROW_LEFT);
+		OsdSetTitle("System Settings", OSD_ARROW_LEFT);
 		menumask = 0;
 		enmask = 0;
 
@@ -5925,7 +5932,7 @@ void HandleUI(void)
 				break;
 			}
 		}
-		else if (left && !Restrict_Settings())
+		else if (left)
 		{
 			menustate = MENU_MISC1;
 		}
