@@ -64,6 +64,8 @@ typedef struct {
 	char custom_aspect_ratio[2][16];
 	char afilter_default[1023];
 	char vfilter_default[1023];
+	char restrictions[256];
+	char restrictions_code[24];
 } cfg_t;
 
 extern cfg_t cfg;

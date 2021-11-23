@@ -63,6 +63,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "support.h"
 #include "bootcore.h"
 #include "ide.h"
+#include "restrict.h"
 
 /*menu states*/
 enum MENU
@@ -91,6 +92,8 @@ enum MENU
 	MENU_ABOUT2,
 	MENU_RESET1,
 	MENU_RESET2,
+	MENU_UNLOCK1,
+	MENU_UNLOCK2,
 
 	MENU_JOYSYSMAP,
 	MENU_JOYDIGMAP,
@@ -188,7 +191,8 @@ static uint32_t menustate = MENU_NONE1;
 static uint32_t parentstate;
 static uint32_t menusub = 0;
 static uint32_t menusub_last = 0; //for when we allocate it dynamically and need to know last row
-static uint64_t menumask = 0;	  // Used to determine which rows are selectable...
+static uint64_t menumask = 0;	  // Used to determine which rows are highlightable...
+static uint64_t enmask = 0;	      // Used to determine which rows are enabled/selectable...
 static uint32_t menu_timer = 0;
 static uint32_t menu_save_timer = 0;
 static uint32_t load_addr = 0;
@@ -276,7 +280,7 @@ static uint32_t fs_ExtLen = 0;
 static uint32_t fs_Options;
 static uint32_t fs_MenuSelect;
 static uint32_t fs_MenuCancel;
-static char fs_RootDir[256];
+static char fs_TopLevelDir[256];
 
 static char *GetExt(char *ext)
 {
@@ -347,10 +351,10 @@ static int changeDir(char *dir)
 		strcat(selPath, dir);
 	}
 
-	ScanDirectory(selPath, SCANF_INIT, fs_pFileExt, fs_Options, fs_RootDir);
+	ScanDirectory(selPath, SCANF_INIT, fs_pFileExt, fs_Options, fs_TopLevelDir);
 	if (curdir[0])
 	{
-		ScanDirectory(selPath, SCANF_SET_ITEM, curdir, fs_Options, fs_RootDir);
+		ScanDirectory(selPath, SCANF_SET_ITEM, curdir, fs_Options, fs_TopLevelDir);
 	}
 	return 1;
 }
@@ -369,7 +373,7 @@ void SelectFile(const char *path, const char *pFileExt, unsigned char Options, u
 	strncpy(selPath, path, sizeof(selPath) - 1);
 	selPath[sizeof(selPath) - 1] = 0;
 
-	const char *limit_root = nullptr;
+	fs_TopLevelDir[0] = 0;
 
 	if (Options & SCANO_CORES)
 	{
@@ -404,13 +408,15 @@ void SelectFile(const char *path, const char *pFileExt, unsigned char Options, u
 			strcpy(selPath, home);
 		}
 
-		limit_root = home;
+		if( Restrict_FileBrowsing() )
+		{
+			strcpy(fs_TopLevelDir, home);
+		}
 	}
 
-	ScanDirectory(selPath, SCANF_INIT, pFileExt, Options, limit_root);
+	ScanDirectory(selPath, SCANF_INIT, pFileExt, Options, fs_TopLevelDir);
 	AdjustDirectory(selPath);
 
-	strcpy(fs_RootDir, limit_root ? limit_root : "");
 	strcpy(fs_pFileExt, pFileExt);
 	fs_ExtLen = strlen(fs_pFileExt);
 	fs_Options = Options & ~SCANO_NOENTER;
@@ -817,6 +823,25 @@ static void MenuWrite(unsigned char n, const char *s = "", unsigned char invert 
 																													: 0,
 				   0);
 }
+
+static void MenuWriteEntry(unsigned char n, const char *s, uint32_t index, bool enabled = true, int arrow = 0)
+{
+	menumask |= 1 << index;
+	if( enabled )
+		enmask |= 1 << index;
+
+	MenuWrite(n, s, menusub == index, enabled ? 0 : 1, arrow);
+}
+
+static void OsdWriteEntry(unsigned char n, const char *s, uint32_t index, bool enabled = true)
+{
+	menumask |= 1 << index;
+	if( enabled )
+		enmask |= 1 << index;
+
+	OsdWrite(n, s, menusub == index, enabled ? 0 : 1);
+}
+
 
 const char *get_rbf_name_bootcore(char *str)
 {
@@ -1569,7 +1594,7 @@ void HandleUI(void)
 			menustate = MENU_COMMON1;
 			menusub = 0;
 		}
-		else if (left)
+		else if (left && !Restrict_Settings())
 		{
 			menustate = MENU_MISC1;
 			menusub = 3;
@@ -1617,6 +1642,7 @@ void HandleUI(void)
 			entry = 0;
 			uint32_t selentry = 0;
 			menumask = 0;
+			enmask = 0;
 
 			OsdSetTitle(page ? title : user_io_get_core_name());
 
@@ -1637,6 +1663,7 @@ void HandleUI(void)
 				if (p)
 				{
 					int h = 0, d = 0, inpage = !page;
+					RestrictOverride override = RestrictOverride::None;
 
 					if (!strncmp(p, "DEFMRA,", 7))
 					{
@@ -1647,10 +1674,9 @@ void HandleUI(void)
 						if (!h && arcade_sw(0)->dip_num)
 						{
 							dip_submenu = selentry;
-							MenuWrite(entry, " DIP Switches              \x16", menusub == selentry, 0);
+							MenuWriteEntry(entry, " DIP Switches              \x16", selentry);
 							entry++;
 							selentry++;
-							menumask = (menumask << 1) | 1;
 						}
 						continue;
 					}
@@ -1660,15 +1686,25 @@ void HandleUI(void)
 						if (!h && arcade_sw(1)->dip_num)
 						{
 							dip2_submenu = selentry;
-							MenuWrite(entry, " Cheats                    \x16", menusub == selentry, 0);
+							MenuWriteEntry(entry, " Cheats                    \x16", selentry);
 							entry++;
 							selentry++;
-							menumask = (menumask << 1) | 1;
 						}
 						continue;
 					}
 					else
 					{
+						if (p[0] == 'Z')
+						{
+							override = RestrictOverride::Allowed;
+							p += 1;
+						}
+						else if( p[0] == 'z')
+						{
+							override = RestrictOverride::Restricted;
+							p += 1;
+						}
+
 						//Hide or Disable flag (small letter - opposite action)
 						while ((p[0] == 'H' || p[0] == 'D' || p[0] == 'h' || p[0] == 'd') && strlen(p) > 2)
 						{
@@ -1704,6 +1740,8 @@ void HandleUI(void)
 								entry++;
 							}
 						}
+
+
 					}
 
 					last_space = 0;
@@ -1734,10 +1772,8 @@ void HandleUI(void)
 								s[28] = 0;
 							}
 
-							MenuWrite(entry, s, menusub == selentry, d);
+							MenuWriteEntry(entry, s, selentry, d == 0);
 
-							// add bit in menu mask
-							menumask = (menumask << 1) | 1;
 							entry++;
 							selentry++;
 						}
@@ -1745,8 +1781,15 @@ void HandleUI(void)
 						// check for 'F'ile or 'S'D image strings
 						if ((p[0] == 'F') || (p[0] == 'S'))
 						{
+							bool enabled = d == 0;
 							if (p[0] == 'S')
 								s_entry = selentry;
+							else
+							{
+								if( p[1] == 'C' && Restrict_Settings() )
+									enabled = false;
+							}
+
 							substrcpy(s, p, 2);
 							int num = (p[1] >= '0' && p[1] <= '9') ? p[1] - '0' : 0;
 
@@ -1776,10 +1819,8 @@ void HandleUI(void)
 								substrcpy(pos, p, 1);
 								strcpy(pos, GetExt(pos));
 							}
-							MenuWrite(entry, s, menusub == selentry, d);
+							MenuWriteEntry(entry, s, selentry, enabled);
 
-							// add bit in menu mask
-							menumask = (menumask << 1) | 1;
 							entry++;
 							selentry++;
 						}
@@ -1797,10 +1838,8 @@ void HandleUI(void)
 							{
 								strcpy(s, " Cheats");
 							}
-							MenuWrite(entry, s, menusub == selentry, !cheats_available() || d);
+							MenuWriteEntry(entry, s, selentry, cheats_available() && ( d == 0 ) && !Restrict_Cheats());
 
-							// add bit in menu mask
-							menumask = (menumask << 1) | 1;
 							entry++;
 							selentry++;
 						}
@@ -1811,10 +1850,8 @@ void HandleUI(void)
 
 							s[0] = ' ';
 							substrcpy(s + 1, p, 1);
-							MenuWrite(entry, s, menusub == selentry, d);
+							MenuWriteEntry(entry, s, selentry, Restrict_Toggle(override) ? false : (d == 0));
 
-							// add bit in menu mask
-							menumask = (menumask << 1) | 1;
 							entry++;
 							selentry++;
 						}
@@ -1872,10 +1909,8 @@ void HandleUI(void)
 							else
 								substrcpy(s + strlen(s), p, 2 + x);
 
-							MenuWrite(entry, s, menusub == selentry, d);
+							MenuWriteEntry(entry, s, selentry, Restrict_Options(override) ? false : (d == 0));
 
-							// add bit in menu mask
-							menumask = (menumask << 1) | 1;
 							entry++;
 							selentry++;
 						}
@@ -1903,14 +1938,13 @@ void HandleUI(void)
 			// exit row
 			if (!page)
 			{
-				MenuWrite(entry, STD_EXIT, menusub == selentry, 0, OSD_ARROW_RIGHT | OSD_ARROW_LEFT);
+				MenuWriteEntry(entry, STD_EXIT, selentry, true, OSD_ARROW_RIGHT | ( Restrict_Settings() ? 0 : OSD_ARROW_LEFT ));
 			}
 			else
 			{
-				MenuWrite(entry, STD_BACK, menusub == selentry, 0, 0);
+				MenuWriteEntry(entry, STD_BACK, selentry, true, 0);
 			}
 			menusub_last = selentry;
-			menumask = (menumask << 1) | 1;
 
 			if (parentstate == MENU_NONE1 && is_pce() && pcecd_using_cd() && menusub != s_entry)
 			{
@@ -1991,7 +2025,7 @@ void HandleUI(void)
 				page = 0;
 			}
 		}
-		else if (select || recent || minus || plus)
+		else if ((select || recent || minus || plus) && ( enmask & ( 1 << menusub ) ) )
 		{
 			if ((dip_submenu == menusub || dip2_submenu == menusub) && select)
 			{
@@ -2005,6 +2039,7 @@ void HandleUI(void)
 				int h = 0, d = 0, inpage = !page;
 				uint32_t entry = 0;
 				int i = 2;
+				RestrictOverride override;
 
 				p = 0;
 				addon[0] = 0;
@@ -2014,6 +2049,8 @@ void HandleUI(void)
 					p = user_io_get_confstr(i++);
 					if (!p)
 						break;
+
+					override = RestrictOverride::None;
 
 					h = 0;
 					d = 0;
@@ -2025,6 +2062,17 @@ void HandleUI(void)
 						h = page || !arcade_sw(1)->dip_num;
 					else if (strncmp(p, "DEFMRA,", 7))
 					{
+						if (p[0] == 'Z')
+						{
+							override = RestrictOverride::Allowed;
+							p += 1;
+						}
+						else if( p[0] == 'z')
+						{
+							override = RestrictOverride::Restricted;
+							p += 1;
+						}
+
 						//Hide or Disable flag
 						while ((p[0] == 'H' || p[0] == 'D' || p[0] == 'h' || p[0] == 'd') && strlen(p) > 2)
 						{
@@ -2184,7 +2232,7 @@ void HandleUI(void)
 							cheatsub = menusub;
 							menusub = 0;
 						}
-						else if ((p[0] == 'O') || (p[0] == 'o'))
+						else if (((p[0] == 'O') || (p[0] == 'o')) && !Restrict_Options(override))
 						{
 							int ex = (p[0] == 'o');
 
@@ -2287,7 +2335,7 @@ void HandleUI(void)
 			menustate = MENU_COMMON1;
 			menusub = 0;
 		}
-		else if (left)
+		else if (left && !Restrict_Settings())
 		{
 			menustate = MENU_MISC1;
 			menusub = 3;
@@ -2398,24 +2446,27 @@ void HandleUI(void)
 		while (1)
 		{
 			n = 0;
-			menumask = 0xf80F;
+			menumask = 0;
+			enmask = 0;
 
 			if (!menusub)
 				firstmenu = 0;
 			adjvisible = 0;
 
-			MenuWrite(n++, " Core                      \x16", menusub == 0, 0);
+
+			MenuWriteEntry(n++, " Core                      \x16", 0, !Restrict_Cores());
 			MenuWrite(n++);
+
 			sprintf(s, " Define %s buttons         ", is_menu() ? "System" : user_io_get_core_name());
 			s[27] = '\x16';
 			s[28] = 0;
-			MenuWrite(n++, s, menusub == 1, 0);
-			MenuWrite(n++, " Button/Key remap for game \x16", menusub == 2, 0);
-			MenuWrite(n++, " Reset player assignment", menusub == 3, 0);
+			MenuWriteEntry(n++, s, 1, !Restrict_Settings());
+			MenuWriteEntry(n++, " Button/Key remap for game \x16", 2, !Restrict_Settings());
+
+			MenuWriteEntry(n++, " Reset player assignment", 3);
 
 			if (user_io_get_uart_mode())
 			{
-				menumask |= 0x10;
 				MenuWrite(n++);
 				int mode = GetUARTMode();
 				const char *p = config_uart_msg[mode];
@@ -2424,15 +2475,14 @@ void HandleUI(void)
 				sprintf(s, " UART mode (%s)            ", p);
 				s[27] = '\x16';
 				s[28] = 0;
-				MenuWrite(n++, s, menusub == 4);
+				MenuWriteEntry(n++, s, 4, !Restrict_Settings());
 			}
 
 			if (video_get_scaler_flt() >= 0 && !cfg.direct_video)
 			{
 				MenuWrite(n++);
-				menumask |= 0x60;
 				sprintf(s, " Scale filter - %s", config_scaler_msg[video_get_scaler_flt() ? 1 : 0]);
-				MenuWrite(n++, s, menusub == 5);
+				MenuWriteEntry(n++, s, 5, !Restrict_Settings());
 
 				memset(s, 0, sizeof(s));
 				s[0] = ' ';
@@ -2445,15 +2495,14 @@ void HandleUI(void)
 					strcat(s, " ");
 				strcat(s, " \x16 ");
 
-				MenuWrite(n++, s, menusub == 6, !video_get_scaler_flt() || !S_ISDIR(getFileType(COEFF_DIR)));
+				MenuWriteEntry(n++, s, 6, video_get_scaler_flt() && S_ISDIR(getFileType(COEFF_DIR)) && !Restrict_Settings());
 			}
 
 			if (video_get_gamma_en() >= 0)
 			{
 				MenuWrite(n++);
-				menumask |= 0x180;
 				sprintf(s, " Gamma correction - %s", config_gamma_msg[video_get_gamma_en() ? 1 : 0]);
-				MenuWrite(n++, s, menusub == 7);
+				MenuWriteEntry(n++, s, 7, !Restrict_Settings());
 
 				memset(s, 0, sizeof(s));
 				s[0] = ' ';
@@ -2466,15 +2515,14 @@ void HandleUI(void)
 					strcat(s, " ");
 				strcat(s, " \x16 ");
 
-				MenuWrite(n++, s, menusub == 8, !video_get_gamma_en() || !S_ISDIR(getFileType(GAMMA_DIR)));
+				MenuWriteEntry(n++, s, 8, video_get_gamma_en() && S_ISDIR(getFileType(GAMMA_DIR)) && !Restrict_Settings());
 			}
 
 			if (audio_filter_en() >= 0)
 			{
 				MenuWrite(n++);
-				menumask |= 0x600;
 				sprintf(s, " Audio filter - %s", config_afilter_msg[audio_filter_en() ? 1 : 0]);
-				MenuWrite(n++, s, menusub == 9);
+				MenuWriteEntry(n++, s, 9, !Restrict_Settings());
 
 				memset(s, 0, sizeof(s));
 				s[0] = ' ';
@@ -2487,28 +2535,31 @@ void HandleUI(void)
 					strcat(s, " ");
 				strcat(s, " \x16 ");
 
-				MenuWrite(n++, s, menusub == 10, !audio_filter_en() || !S_ISDIR(getFileType(AFILTER_DIR)));
+				MenuWriteEntry(n++, s, 10, audio_filter_en() && S_ISDIR(getFileType(AFILTER_DIR)) && !Restrict_Settings());
 			}
 
-			if (is_minimig() || is_st())
-			{
-				menumask &= ~0x1800;
-			}
-			else
+			if (!is_minimig() && !is_st())
 			{
 				MenuWrite(n++);
-				MenuWrite(n++, " Reset settings", menusub == 11, is_archie());
-				MenuWrite(n++, " Save settings", menusub == 12, 0);
+				MenuWriteEntry(n++, " Reset settings", 11, !is_archie() && !Restrict_Settings());
+				MenuWriteEntry(n++, " Save settings", 12, !Restrict_Settings());
 			}
 
 			MenuWrite(n++);
 			cr = n;
-			MenuWrite(n++, " Reboot (hold \x16 cold reboot)", menusub == 13);
-			MenuWrite(n++, " About", menusub == 14);
+			MenuWriteEntry(n++, " Reboot (hold \x16 cold reboot)", 13, !Restrict_Cores());
+			if( Restrict_AnySpecified() && !Restrict_Unlock() )
+			{
+				if( Restrict_Enabled() )
+					MenuWriteEntry(n++, " Unlock", 14);
+				else
+					MenuWriteEntry(n++, " Lock", 14);
+			}
+			MenuWriteEntry(n++, " About", 15);
 
 			while (n < OsdGetSize() - 1)
 				MenuWrite(n++);
-			MenuWrite(n++, STD_EXIT, menusub == 15, 0, OSD_ARROW_LEFT);
+			MenuWriteEntry(n++, STD_EXIT, 16, true, OSD_ARROW_LEFT);
 			sysinfo_timer = 0;
 
 			if (!adjvisible)
@@ -2544,7 +2595,7 @@ void HandleUI(void)
 			break;
 		}
 
-		if (select)
+		if (select && ( enmask & ( 1 << menusub ) ) )
 		{
 			switch (menusub)
 			{
@@ -2690,6 +2741,19 @@ void HandleUI(void)
 			break;
 
 			case 14:
+				if( Restrict_Enabled() )
+				{
+					menustate = MENU_UNLOCK1;
+					menusub = 0;
+				}
+				else
+				{
+					Restrict_Enable();
+					menustate = MENU_COMMON1;
+				}
+				break;
+
+			case 15:
 				menustate = MENU_ABOUT1;
 				menusub = 0;
 				break;
@@ -2739,7 +2803,6 @@ void HandleUI(void)
 
 	case MENU_ARCADE_DIP1:
 		helptext_idx = 0;
-		menumask = 0;
 		OsdSetTitle(dipv ? "Cheats" : "DIP Switches");
 		menustate = MENU_ARCADE_DIP2;
 		parentstate = MENU_ARCADE_DIP1;
@@ -2747,12 +2810,14 @@ void HandleUI(void)
 		while (1)
 		{
 			int entry = 0;
+			bool restrict = dipv ? Restrict_Cheats() : Restrict_DIPSwitches();
 			if (!menusub)
 				firstmenu = 0;
 
 			adjvisible = 0;
 			uint32_t selentry = 0;
 			menumask = 0;
+			enmask = 0;
 
 			sw_struct *sw = arcade_sw(dipv);
 
@@ -2789,9 +2854,8 @@ void HandleUI(void)
 
 				strcat(s, sw->dip[i].id[m]);
 
-				MenuWrite(entry, s, menusub == selentry);
+				MenuWriteEntry(entry, s, selentry, !restrict);
 
-				menumask = (menumask << 1) | 1;
 				entry++;
 				selentry++;
 			};
@@ -2799,9 +2863,12 @@ void HandleUI(void)
 			for (; entry < OsdGetSize() - 1; entry++)
 				MenuWrite(entry, "", 0, 0);
 
-			MenuWrite(entry, dipv ? STD_BACK : "       Reset to apply", menusub == selentry);
+			if( dipv )
+				MenuWriteEntry(entry, STD_BACK, selentry);
+			else
+				MenuWriteEntry(entry, "       Reset to apply", selentry, !restrict);
+
 			menusub_last = selentry;
-			menumask = (menumask << 1) | 1;
 
 			if (!adjvisible)
 				break;
@@ -2817,7 +2884,7 @@ void HandleUI(void)
 			arcade_sw_save(0);
 		}
 
-		if (select)
+		if (select && ( enmask & ( 1 << menusub ) ))
 		{
 			if (menusub == menusub_last)
 			{
@@ -3819,9 +3886,58 @@ void HandleUI(void)
 		if (menu | select | left)
 		{
 			menustate = MENU_COMMON1;
-			menusub = 14;
+			menusub = 15;
 		}
 		break;
+
+	case MENU_UNLOCK1:
+		Restrict_StartUnlock();
+		OsdSetSize(16);
+		menumask = 0;
+		helptext_idx = 0;
+		OsdSetTitle("Unlock", 0);
+		menustate = MENU_UNLOCK2;
+		parentstate = MENU_UNLOCK1;
+		for (int i = 0; i < OsdGetSize(); i++)
+			OsdWrite(i, "", 0, 0);
+		break;
+
+	case MENU_UNLOCK2:
+	{
+		int count = Restrict_HandleUnlock(c);
+		int maxlen = Restrict_UnlockLength();
+		if( count < 0 )
+		{
+			if( is_menu() )
+			{
+				menustate = MENU_SYSTEM1;
+				menusub = 5;
+			}
+			else
+			{
+				menustate = MENU_COMMON1;
+				menusub = 14;
+			}
+		}
+		else
+		{
+			m = 5;
+			OsdWrite(m++, "      Enter Unlock Code", 0, 0, 1);
+			OsdWrite(m++, "", 0, 0, 1);
+			OsdWrite(m++, "", 0, 0, 1);
+			int i;
+			for( i = 0; i < ( 29 - maxlen ) / 2; i++ )
+				s[i] = ' ';
+			for( int j = 0; j < maxlen; j++, i++ )
+			{
+				s[i] = j < count ? '*' : '-';
+			}
+
+			s[i] = '\0';
+			OsdWrite(m++, s, 0, 0, 1);
+		}
+		break;
+	}
 
 		/******************************************************************/
 		/* st main menu                                                 */
@@ -3883,7 +3999,7 @@ void HandleUI(void)
 			menustate = MENU_COMMON1;
 			menusub = 0;
 		}
-		else if (left)
+		else if (left && !Restrict_Settings())
 		{
 			menustate = MENU_MISC1;
 			menusub = 3;
@@ -4674,7 +4790,7 @@ void HandleUI(void)
 		{
 			filter[0] = 0;
 			filter_typing_timer = 0;
-			ScanDirectory(selPath, SCANF_INIT, fs_pFileExt, fs_Options, fs_RootDir);
+			ScanDirectory(selPath, SCANF_INIT, fs_pFileExt, fs_Options, fs_TopLevelDir);
 			menustate = MENU_FILE_SELECT1;
 		}
 
@@ -4685,7 +4801,7 @@ void HandleUI(void)
 			if (c == KEY_HOME || c == KEY_TAB)
 			{
 				filter_typing_timer = 0;
-				ScanDirectory(selPath, SCANF_INIT, fs_pFileExt, fs_Options, fs_RootDir);
+				ScanDirectory(selPath, SCANF_INIT, fs_pFileExt, fs_Options, fs_TopLevelDir);
 				menustate = MENU_FILE_SELECT1;
 				select = (c == KEY_TAB && flist_SelectedItem()->de.d_type == DT_DIR && !strcmp(flist_SelectedItem()->de.d_name, ".."));
 			}
@@ -4693,35 +4809,35 @@ void HandleUI(void)
 			if (c == KEY_END)
 			{
 				filter_typing_timer = 0;
-				ScanDirectory(selPath, SCANF_END, fs_pFileExt, fs_Options, fs_RootDir);
+				ScanDirectory(selPath, SCANF_END, fs_pFileExt, fs_Options, fs_TopLevelDir);
 				menustate = MENU_FILE_SELECT1;
 			}
 
 			if ((c == KEY_PAGEUP) || (c == KEY_LEFT))
 			{
 				filter_typing_timer = 0;
-				ScanDirectory(selPath, SCANF_PREV_PAGE, fs_pFileExt, fs_Options, fs_RootDir);
+				ScanDirectory(selPath, SCANF_PREV_PAGE, fs_pFileExt, fs_Options, fs_TopLevelDir);
 				menustate = MENU_FILE_SELECT1;
 			}
 
 			if ((c == KEY_PAGEDOWN) || (c == KEY_RIGHT))
 			{
 				filter_typing_timer = 0;
-				ScanDirectory(selPath, SCANF_NEXT_PAGE, fs_pFileExt, fs_Options, fs_RootDir);
+				ScanDirectory(selPath, SCANF_NEXT_PAGE, fs_pFileExt, fs_Options, fs_TopLevelDir);
 				menustate = MENU_FILE_SELECT1;
 			}
 
 			if (down) // scroll down one entry
 			{
 				filter_typing_timer = 0;
-				ScanDirectory(selPath, SCANF_NEXT, fs_pFileExt, fs_Options, fs_RootDir);
+				ScanDirectory(selPath, SCANF_NEXT, fs_pFileExt, fs_Options, fs_TopLevelDir);
 				menustate = MENU_FILE_SELECT1;
 			}
 
 			if (up) // scroll up one entry
 			{
 				filter_typing_timer = 0;
-				ScanDirectory(selPath, SCANF_PREV, fs_pFileExt, fs_Options, fs_RootDir);
+				ScanDirectory(selPath, SCANF_PREV, fs_pFileExt, fs_Options, fs_TopLevelDir);
 				menustate = MENU_FILE_SELECT1;
 			}
 
@@ -4738,14 +4854,14 @@ void HandleUI(void)
 						// You need both ScanDirectory calls here: the first
 						// call "clears" the filter, the second one scrolls to
 						// the right place in the list
-						ScanDirectory(selPath, SCANF_INIT, fs_pFileExt, fs_Options, fs_RootDir);
-						ScanDirectory(selPath, i, fs_pFileExt, fs_Options, fs_RootDir);
+						ScanDirectory(selPath, SCANF_INIT, fs_pFileExt, fs_Options, fs_TopLevelDir);
+						ScanDirectory(selPath, i, fs_pFileExt, fs_Options, fs_TopLevelDir);
 					}
 					else if (filter_len < 255)
 					{
 						filter[filter_len++] = i;
 						filter[filter_len] = 0;
-						ScanDirectory(selPath, SCANF_INIT, fs_pFileExt, fs_Options, fs_RootDir, NULL, filter);
+						ScanDirectory(selPath, SCANF_INIT, fs_pFileExt, fs_Options, fs_TopLevelDir, NULL, filter);
 					}
 
 					filter_typing_timer = GetTimer(2000);
@@ -5270,7 +5386,7 @@ void HandleUI(void)
 			menustate = MENU_COMMON1;
 			menusub = 0;
 		}
-		else if (left)
+		else if (left && !Restrict_Settings())
 		{
 			menustate = MENU_MISC1;
 			menusub = 3;
@@ -6006,8 +6122,9 @@ void HandleUI(void)
 		parentstate = menustate;
 
 		m = 0;
-		OsdSetTitle("System Settings", OSD_ARROW_LEFT);
-		menumask = 0x3F;
+		OsdSetTitle("System Settings", Restrict_Settings() ? 0 : OSD_ARROW_LEFT);
+		menumask = 0;
+		enmask = 0;
 
 		OsdWrite(m++);
 		sprintf(s, "       MiSTer v%s", version + 5);
@@ -6042,7 +6159,7 @@ void HandleUI(void)
 		{
 			OsdWrite(m++, "        Storage: USB");
 			m++;
-			OsdWrite(m++, "      Switch to SD card", menusub == 0);
+			OsdWriteEntry(m++, "      Switch to SD card", 0, !Restrict_Settings());
 		}
 		else
 		{
@@ -6050,29 +6167,36 @@ void HandleUI(void)
 			{
 				OsdWrite(m++, " No USB found, using SD card");
 				m++;
-				OsdWrite(m++, "      Switch to SD card", menusub == 0);
+				OsdWriteEntry(m++, "      Switch to SD card", 0, !Restrict_Settings());
 			}
 			else
 			{
 				OsdWrite(m++, "      Storage: SD card");
 				m++;
-				OsdWrite(m++, "        Switch to USB", menusub == 0, !isUSBMounted());
+				OsdWriteEntry(m++, "        Switch to USB", 0, isUSBMounted() && !Restrict_Settings());
 			}
 		}
 		OsdWrite(m++, "");
-		OsdWrite(m++, " Remap keyboard            \x16", menusub == 1);
-		OsdWrite(m++, " Define joystick buttons   \x16", menusub == 2);
-		OsdWrite(m++, " Scripts                   \x16", menusub == 3);
+		OsdWriteEntry(m++, " Remap keyboard            \x16", 1, !Restrict_Settings());
+		OsdWriteEntry(m++, " Define joystick buttons   \x16", 2, !Restrict_Settings());
+		OsdWriteEntry(m++, " Scripts                   \x16", 3, !Restrict_Settings());
 		OsdWrite(m++, "");
 		cr = m;
-		OsdWrite(m++, " Reboot (hold \x16 cold reboot)", menusub == 4);
+		OsdWriteEntry(m++, " Reboot (hold \x16 cold reboot)", 4, !Restrict_Cores());
+		if( Restrict_AnySpecified() && !Restrict_Unlock() )
+		{
+			if( Restrict_Enabled() )
+				OsdWriteEntry(m++, " Unlock", 5);
+			else
+				OsdWriteEntry(m++, " Lock", 5);
+		}
 		sysinfo_timer = 0;
 
 		reboot_req = 0;
 
 		while (m < OsdGetSize() - 1)
 			OsdWrite(m++, "");
-		OsdWrite(15, STD_EXIT, menusub == 5);
+		OsdWriteEntry(15, STD_EXIT, 6);
 		menustate = MENU_SYSTEM2;
 		break;
 
@@ -6082,7 +6206,7 @@ void HandleUI(void)
 			SelectFile("", 0, SCANO_CORES, MENU_CORE_FILE_SELECTED1, MENU_SYSTEM1);
 			break;
 		}
-		else if (select)
+		else if (select && ( enmask & ( 1 << menusub ) ) )
 		{
 			switch (menusub)
 			{
@@ -6141,11 +6265,24 @@ void HandleUI(void)
 			break;
 
 			case 5:
+				if( Restrict_Enabled() )
+				{
+					menustate = MENU_UNLOCK1;
+					menusub = 0;
+				}
+				else
+				{
+					Restrict_Enable();
+					menustate = MENU_SYSTEM1;
+				}
+				break;
+
+			case 6:
 				menustate = MENU_NONE1;
 				break;
 			}
 		}
-		else if (left)
+		else if (left && !Restrict_Settings())
 		{
 			menustate = MENU_MISC1;
 		}
@@ -6540,7 +6677,7 @@ void HandleUI(void)
 				AdjustDirectory(selPath);
 				cp_MenuCancel = fs_MenuCancel;
 				strcpy(fs_pFileExt, "TXT");
-				strcpy(fs_RootDir, ""); //MJD_TODO - whats going on here?
+				strcpy(fs_TopLevelDir, "");
 				fs_ExtLen = 3;
 				fs_Options = SCANO_CORES;
 				fs_MenuSelect = MENU_CORE_FILE_SELECTED2;
