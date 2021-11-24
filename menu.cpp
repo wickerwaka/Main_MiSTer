@@ -1685,7 +1685,7 @@ void HandleUI(void)
 						// check for 'F'ile or 'S'D image strings
 						if ((p[0] == 'F') || (p[0] == 'S'))
 						{
-							bool enabled = d == 0;
+							bool enabled = (d == 0) && !Restrict_Load();
 							if (p[0] == 'S')
 								s_entry = selentry;
 							else
@@ -2193,7 +2193,7 @@ void HandleUI(void)
 			menustate = MENU_COMMON1;
 			menusub = 0;
 		}
-		else if (left && !Restrict_Settings())
+		else if (left)
 		{
 			menustate = MENU_MISC1;
 			menusub = 3;

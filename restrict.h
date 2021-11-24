@@ -20,6 +20,7 @@ bool Restrict_Cheats();
 bool Restrict_DIPSwitches();
 bool Restrict_Volume();
 bool Restrict_Mapping();
+bool Restrict_Load();
 
 bool Restrict_Options( RestrictOverride override );
 bool Restrict_Toggle( RestrictOverride override );

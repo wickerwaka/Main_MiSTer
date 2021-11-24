@@ -9,7 +9,7 @@ enum Restrictions
 	BROWSING = 1 << 1,
 	OPTIONS = 1 << 2,
 	CORES = 1 << 3,
-	UNLOCK = 1 << 4,
+	LOAD = 1 << 4,
 	CHEATS = 1 << 5,
 	DIP_SWITCHES = 1 << 6,
 	VOLUME = 1 << 7,
@@ -26,11 +26,6 @@ void Restrict_Init(const char *config, const char *code)
 	restrictions = 0;
 
 	strncpy( unlockCode, code, sizeof(unlockCode) - 1);
-
-	if( unlockCode[0] == 0 )
-	{
-		restrictions |= UNLOCK;
-	}
 
 	const char *end = config + strlen(config);
 
@@ -58,10 +53,6 @@ void Restrict_Init(const char *config, const char *code)
 		{
 			restrictions |= CORES;
 		}
-		else if( !strncasecmp(p, "unlock", len) )
-		{
-			restrictions |= UNLOCK;
-		}
 		else if( !strncasecmp(p, "cheats", len) )
 		{
 			restrictions |= CHEATS;
@@ -77,6 +68,10 @@ void Restrict_Init(const char *config, const char *code)
 		else if( !strncasecmp(p, "mapping", len) )
 		{
 			restrictions |= MAPPING;
+		}
+		else if( !strncasecmp(p, "load", len) )
+		{
+			restrictions |= LOAD;
 		}
 		else if( !strncasecmp(p, "all", len) )
 		{
@@ -114,7 +109,7 @@ bool Restrict_Settings()
 
 bool Restrict_Unlock()
 {
-	return restrictions_enabled && ( restrictions & UNLOCK );
+	return unlockCode[0] == '\0';
 }
 
 bool Restrict_FileBrowsing()
@@ -145,6 +140,11 @@ bool Restrict_Volume()
 bool Restrict_Mapping()
 {
 	return restrictions_enabled && ( restrictions & MAPPING );
+}
+
+bool Restrict_Load()
+{
+	return restrictions_enabled && ( restrictions & LOAD );
 }
 
 bool Restrict_Options( RestrictOverride override )
