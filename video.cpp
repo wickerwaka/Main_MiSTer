@@ -223,7 +223,8 @@ static void setScaler()
 	for (int i = 0; i < 4; i++) spi_w(arc[i]);
 	DisableIO();
 
-	if (!spi_uio_cmd_cont(UIO_SET_FLTNUM))
+	uint16_t scaler_version = spi_uio_cmd_cont(UIO_SET_FLTNUM);
+	if (!scaler_version)
 	{
 		DisableIO();
 		return;
@@ -237,7 +238,11 @@ static void setScaler()
 	if (FileOpenTextReader(&reader, filename))
 	{
 		//printf("Read scaler coefficients\n");
-		spi_uio_cmd_cont(UIO_SET_FLTCOEF);
+		const int NUM_TAPS = 4;
+		const int NUM_PHASES = 16;
+		const int NUM_FILTERS = 4;
+		int coeffs[NUM_TAPS * NUM_PHASES * NUM_FILTERS];
+		memset(coeffs, 0, sizeof(coeffs));
 
 		int phase = 0;
 		const char *line;
@@ -250,16 +255,45 @@ static void setScaler()
 				//printf("   phase %c-%02d: %4d,%4d,%4d,%4d\n", (phase >= 16) ? 'V' : 'H', phase % 16, c0, c1, c2, c3);
 				//printf("%03X: %03X %03X %03X %03X;\n",phase*4, c0 & 0x1FF, c1 & 0x1FF, c2 & 0x1FF, c3 & 0x1FF);
 
-				spi_w((c0 & 0x1FF) | (((phase * 4) + 0) << 9));
-				spi_w((c1 & 0x1FF) | (((phase * 4) + 1) << 9));
-				spi_w((c2 & 0x1FF) | (((phase * 4) + 2) << 9));
-				spi_w((c3 & 0x1FF) | (((phase * 4) + 3) << 9));
+				int *c = &coeffs[phase * NUM_TAPS];
+				c[0] = c0;
+				c[1] = c1;
+				c[2] = c2;
+				c[3] = c3;
 
 				phase++;
-				if (phase >= 32) break;
+				if (phase >= (NUM_PHASES * NUM_FILTERS)) break;
 			}
 		}
-		DisableIO();
+
+		const int half_count = NUM_PHASES * NUM_FILTERS / 2;
+
+		if( phase == half_count )
+		{
+			memcpy(coeffs + ( half_count * NUM_TAPS ), coeffs, sizeof(int) * half_count * NUM_TAPS );
+		}
+
+		if( scaler_version == 1 )
+		{
+			spi_uio_cmd_cont(UIO_SET_FLTCOEF);
+			for( int p = 0; p < 32 * 4; p++ )
+			{
+				spi_w((coeffs[p] & 0x1FF) | ((p) << 9));
+			}
+			DisableIO();
+		}
+		else
+		{
+			spi_uio_cmd_cont(UIO_SET_FLTCOEF);
+			spi_w(0); // addr
+
+			for( int i = 0; i < NUM_PHASES * NUM_TAPS * NUM_FILTERS; i++ )
+			{
+				spi_w((coeffs[i] & 0x1FF));
+			}
+					
+			DisableIO();
+		}
 	}
 }
 
