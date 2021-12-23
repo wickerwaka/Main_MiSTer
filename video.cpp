@@ -239,9 +239,8 @@ static void setScaler()
 	{
 		//printf("Read scaler coefficients\n");
 		const int NUM_TAPS = 4;
-		const int NUM_PHASES = 16;
-		const int NUM_FILTERS = 4;
-		int coeffs[NUM_TAPS * NUM_PHASES * NUM_FILTERS];
+		const int NUM_PHASES = 32;
+		int coeffs[NUM_TAPS * NUM_PHASES * 2];
 		memset(coeffs, 0, sizeof(coeffs));
 
 		int phase = 0;
@@ -262,21 +261,20 @@ static void setScaler()
 				c[3] = c3;
 
 				phase++;
-				if (phase >= (NUM_PHASES * NUM_FILTERS)) break;
+				if (phase >= (NUM_PHASES * 2)) break;
 			}
 		}
 
-		const int half_count = NUM_PHASES * NUM_FILTERS / 2;
-
-		if( phase == half_count )
+		if( phase == NUM_PHASES )
 		{
-			memcpy(coeffs + ( half_count * NUM_TAPS ), coeffs, sizeof(int) * half_count * NUM_TAPS );
+			// If we only have one set of filters them duplicate them
+			memcpy(coeffs + ( NUM_PHASES * NUM_TAPS ), coeffs, sizeof(int) * NUM_PHASES * NUM_TAPS );
 		}
 
 		if( scaler_version == 1 )
 		{
 			spi_uio_cmd_cont(UIO_SET_FLTCOEF);
-			for( int p = 0; p < 32 * 4; p++ )
+			for( int p = 0; p < NUM_PHASES * NUM_TAPS; p++ )
 			{
 				spi_w((coeffs[p] & 0x1FF) | ((p) << 9));
 			}
@@ -287,9 +285,18 @@ static void setScaler()
 			spi_uio_cmd_cont(UIO_SET_FLTCOEF);
 			spi_w(0); // addr
 
-			for( int i = 0; i < NUM_PHASES * NUM_TAPS * NUM_FILTERS; i++ )
+			for( int i = 0; i < NUM_PHASES * NUM_TAPS; i++ )
 			{
 				spi_w((coeffs[i] & 0x1FF));
+			}
+
+			int j = NUM_PHASES * NUM_TAPS;
+
+			// Send delta between first set of filters and second
+			for( int i = 0; i < NUM_PHASES * NUM_TAPS; i++ )
+			{
+				int c = coeffs[i+j] - coeffs[i];
+				spi_w((c & 0x1FF));
 			}
 					
 			DisableIO();
