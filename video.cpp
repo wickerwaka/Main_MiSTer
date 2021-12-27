@@ -427,14 +427,7 @@ static void setShadowMask()
 
 	has_shadow_mask = true;
 
-	switch( video_get_shadow_mask_mode() )
-	{
-		default: spi_w(SM_FLAG(0)); break;
-		case SM_MODE_1X: spi_w(SM_FLAG(SM_FLAG_ENABLED)); break;
-		case SM_MODE_2X: spi_w(SM_FLAG(SM_FLAG_ENABLED | SM_FLAG_2X)); break;
-		case SM_MODE_1X_ROTATED: spi_w(SM_FLAG(SM_FLAG_ENABLED | SM_FLAG_ROTATED)); break;
-		case SM_MODE_2X_ROTATED: spi_w(SM_FLAG(SM_FLAG_ENABLED | SM_FLAG_ROTATED | SM_FLAG_2X)); break;
-	}
+	spi_w(SM_FLAG(0)); // default to disabled
 
 	snprintf(filename, sizeof(filename), SMASK_DIR"/%s", shadow_mask_cfg + 1);
 
@@ -443,6 +436,8 @@ static void setShadowMask()
 	{
 		int w = -1, h = -1;
 		int y = 0;
+		int v2 = 0;
+		bool valid = false;
 
 		const char *line;
 		while ((line = FileReadLine( &reader )))
@@ -452,7 +447,6 @@ static void setShadowMask()
 				int n = sscanf(line, "%d,%d", &w, &h);
 				if( (n != 2) || (w <= 0) || ( w <= 0 ) )
 				{
-					spi_w(SM_FLAG(0));
 					break;
 				}
 			}
@@ -462,7 +456,6 @@ static void setShadowMask()
 				int n = sscanf(line, "%u,%u,%u,%u,%u,%u,%u,%u", p+0, p+1, p+2, p+3, p+4, p+5, p+6, p+7);
 				if( n != w )
 				{
-					spi_w(SM_FLAG(0));
 					break;
 				}
 
@@ -474,12 +467,25 @@ static void setShadowMask()
 
 				y += 1;
 
-				if( y == h ) break;
+				if( y == h )
+				{
+					valid = true;
+					break;
+				}
 			}
 		}
 
-		if( y == h )
+		if( valid )
 		{
+			switch( video_get_shadow_mask_mode() )
+			{
+				default: spi_w(SM_FLAG(0)); break;
+				case SM_MODE_1X: spi_w(SM_FLAG(SM_FLAG_ENABLED)); break;
+				case SM_MODE_2X: spi_w(SM_FLAG(SM_FLAG_ENABLED | SM_FLAG_2X)); break;
+				case SM_MODE_1X_ROTATED: spi_w(SM_FLAG(SM_FLAG_ENABLED | SM_FLAG_ROTATED)); break;
+				case SM_MODE_2X_ROTATED: spi_w(SM_FLAG(SM_FLAG_ENABLED | SM_FLAG_ROTATED | SM_FLAG_2X)); break;
+			}
+
 			spi_w(SM_HMAX(w - 1));
 			spi_w(SM_VMAX(h - 1));
 		}
