@@ -42,5 +42,8 @@ int OsdGetSize();
 
 #define OsdIsBig (OsdGetSize()>8)
 
+// Set palette from color string
+void OsdPaletteSet(const char *str);
+
 #endif
 

@@ -52,6 +52,8 @@ as rotated copies of the first 128 entries.  -- AMR
 #define OSD_CMD_WRITE    0x20      // OSD write video data command
 #define OSD_CMD_ENABLE   0x41      // OSD enable command
 #define OSD_CMD_DISABLE  0x40      // OSD disable command
+#define OSD_CMD_PALETTE  0x80      // OSD palette data
+
 
 static int osd_size = 8;
 
@@ -72,7 +74,7 @@ struct star
 };
 
 struct star stars[64];
-static uint8_t osdbuf[256 * 32];
+static uint16_t osdbuf[256 * 32];
 static int  osdbufpos = 0;
 static int  osdset = 0;
 
@@ -223,23 +225,25 @@ static void osd_start(int line)
 
 static void draw_title(const unsigned char *p)
 {
+	const uint16_t color = 0x100;
+
 	// left white border
-	osdbuf[osdbufpos++] = 0xff;
-	osdbuf[osdbufpos++] = 0xff;
-	osdbuf[osdbufpos++] = 0xff;
+	osdbuf[osdbufpos++] = color | 0xff;
+	osdbuf[osdbufpos++] = color | 0xff;
+	osdbuf[osdbufpos++] = color | 0xff;
 
 	for (int i = 0; i < 8; i++)
 	{
-		osdbuf[osdbufpos++] = 255 ^ *p;
-		osdbuf[osdbufpos++] = 255 ^ *p++;
+		osdbuf[osdbufpos++] = color | ( 255 ^ *p );
+		osdbuf[osdbufpos++] = color | ( 255 ^ *p++ );
 	}
 
 	// right white border
-	osdbuf[osdbufpos++] = 0xff;
+	osdbuf[osdbufpos++] = color | 0xff;
 
 	// blue gap
-	osdbuf[osdbufpos++] = 0;
-	osdbuf[osdbufpos++] = 0;
+	osdbuf[osdbufpos++] = color | 0x00;
+	osdbuf[osdbufpos++] = color | 0x00;
 }
 
 // write a null-terminated string <s> to the OSD buffer starting at line <n>
@@ -268,6 +272,8 @@ void OsdWriteOffset(unsigned char n, const char *s, unsigned char invert, unsign
 
 	unsigned char xormask = 0;
 	unsigned char xorchar = 0;
+
+	unsigned short color = 0;
 
 	i = 0;
 	// send all characters in string to OSD
@@ -299,18 +305,18 @@ void OsdWriteOffset(unsigned char n, const char *s, unsigned char invert, unsign
 		{	// Draw initial arrow
 			unsigned char b;
 
-			osdbuf[osdbufpos++] = xormask;
-			osdbuf[osdbufpos++] = xormask;
-			osdbuf[osdbufpos++] = xormask;
+			osdbuf[osdbufpos++] = color | xormask;
+			osdbuf[osdbufpos++] = color | xormask;
+			osdbuf[osdbufpos++] = color | xormask;
 			p = &charfont[0x10][0];
-			for (b = 0; b<8; b++) osdbuf[osdbufpos++] = (*p++ << offset) ^ xormask;
+			for (b = 0; b<8; b++) osdbuf[osdbufpos++] = color | ((*p++ << offset) ^ xormask);
 			p = &charfont[0x14][0];
-			for (b = 0; b<8; b++) osdbuf[osdbufpos++] = (*p++ << offset) ^ xormask;
-			osdbuf[osdbufpos++] = xormask;
-			osdbuf[osdbufpos++] = xormask;
-			osdbuf[osdbufpos++] = xormask;
-			osdbuf[osdbufpos++] = xormask;
-			osdbuf[osdbufpos++] = xormask;
+			for (b = 0; b<8; b++) osdbuf[osdbufpos++] = color | ((*p++ << offset) ^ xormask);
+			osdbuf[osdbufpos++] = color | xormask;
+			osdbuf[osdbufpos++] = color | xormask;
+			osdbuf[osdbufpos++] = color | xormask;
+			osdbuf[osdbufpos++] = color | xormask;
+			osdbuf[osdbufpos++] = color | xormask;
 
 			i += 24;
 			arrowmask &= ~OSD_ARROW_LEFT;
@@ -341,13 +347,17 @@ void OsdWriteOffset(unsigned char n, const char *s, unsigned char invert, unsign
 				// send new line number to OSD
 				osd_start(n);
 			}
+			else if (b >= 0x10 && b < 0x14)
+			{
+				color = ( b - 0x10 ) << 8;
+			}
 			else if (i<(linelimit - 8))
 			{  // normal character
 				unsigned char c;
 				p = &charfont[b][0];
 				for (c = 0; c<8; c++) {
 					char bg = usebg ? framebuffer[n][i+c-22] : 0;
-					osdbuf[osdbufpos++] = (((*p++ << offset)&stipplemask) ^ xormask ^ xorchar) | bg;
+					osdbuf[osdbufpos++] = (((*p++ << offset)&stipplemask) ^ xormask ^ xorchar) | bg | color;
 					stipplemask ^= stipple;
 				}
 				i += 8;
@@ -358,22 +368,22 @@ void OsdWriteOffset(unsigned char n, const char *s, unsigned char invert, unsign
 	for (; i < linelimit; i++) // clear end of line
 	{
 		char bg = usebg ? framebuffer[n][i-22] : 0;
-		osdbuf[osdbufpos++] = xormask | bg;
+		osdbuf[osdbufpos++] = xormask | bg | color;
 	}
 
 	if (n == (osd_size-1) && (arrowmask & OSD_ARROW_RIGHT))
 	{	// Draw final arrow if needed
 		unsigned char c;
-		osdbuf[osdbufpos++] = xormask;
-		osdbuf[osdbufpos++] = xormask;
-		osdbuf[osdbufpos++] = xormask;
+		osdbuf[osdbufpos++] = xormask | color;
+		osdbuf[osdbufpos++] = xormask | color;
+		osdbuf[osdbufpos++] = xormask | color;
 		p = &charfont[0x15][0];
-		for (c = 0; c<8; c++) osdbuf[osdbufpos++] = (*p++ << offset) ^ xormask;
+		for (c = 0; c<8; c++) osdbuf[osdbufpos++] = color | ((*p++ << offset) ^ xormask);
 		p = &charfont[0x11][0];
-		for (c = 0; c<8; c++) osdbuf[osdbufpos++] = (*p++ << offset) ^ xormask;
-		osdbuf[osdbufpos++] = xormask;
-		osdbuf[osdbufpos++] = xormask;
-		osdbuf[osdbufpos++] = xormask;
+		for (c = 0; c<8; c++) osdbuf[osdbufpos++] = color | ((*p++ << offset) ^ xormask);
+		osdbuf[osdbufpos++] = xormask | color;
+		osdbuf[osdbufpos++] = xormask | color;
+		osdbuf[osdbufpos++] = xormask | color;
 		i += 22;
 	}
 }
@@ -383,7 +393,11 @@ void OsdShiftDown(unsigned char n)
 	osd_start(n);
 
 	osdbufpos += 22;
-	for (int i = 22; i < 256; i++) osdbuf[osdbufpos++] <<= 1;
+	for (int i = 22; i < 256; i++)
+	{
+		uint16_t x = osdbuf[osdbufpos];
+		osdbuf[osdbufpos++] = (x & 0xff00) | ((x << 1) & 0x00ff);
+	}
 }
 
 
@@ -659,15 +673,50 @@ char* OsdCoreNameGet()
 	return lastcorename;
 }
 
+static bool osd_palette_dirty = true;
+static constexpr uint16_t default_palette[8] = { 0x200, 0xfdd, 0x200, 0xfdd, 0x200, 0xfdd, 0x200, 0xfdd };
+static uint16_t osd_palette[8] = { 0x200, 0xfdd, 0x200, 0xfdd, 0x200, 0xfdd, 0x200, 0xfdd };
+
+void OsdPaletteSet(const char *str)
+{
+	uint16_t c[8];
+
+	int count = sscanf(str, "%hx,%hx,%hx,%hx,%hx,%hx,%hx,%hx",
+		&c[0], &c[1], &c[2], &c[3], &c[4], &c[5], &c[6], &c[7]);
+	
+	for (int i = 0; i < 8; i++)
+	{
+		if (i >= count || c[i] > 0x0fff)
+		{
+			osd_palette[i] = default_palette[i];
+		}
+		else
+		{
+			osd_palette[i] = c[i];
+		}
+	}
+
+	osd_palette_dirty = true;
+}
+
 void OsdUpdate()
 {
 	int n = is_menu() ? 19 : osd_size;
+	
+	if (osd_palette_dirty)
+	{
+		spi_osd_cmd_cont(OSD_CMD_PALETTE);
+		spi_write((uint8_t *)osd_palette, sizeof(osd_palette), 1);
+		DisableOsd();
+		osd_palette_dirty = false;
+	}
+
 	for (int i = 0; i < n; i++)
 	{
 		if (osdset & (1 << i))
 		{
 			spi_osd_cmd_cont(OSD_CMD_WRITE | i);
-			spi_write(osdbuf + i * 256, 256, 0);
+			spi_write((uint8_t *)(osdbuf + i * 256), 256 * 2, 1);
 			DisableOsd();
 			if (is_megacd()) mcd_poll();
 			if (is_pce()) pcecd_poll();

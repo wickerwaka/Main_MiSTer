@@ -69,6 +69,7 @@ typedef struct {
 	char vfilter_vertical_default[1023];
 	char vfilter_scanlines_default[1023];
 	char shmask_default[1023];
+	char osd_colors[128];
 } cfg_t;
 
 extern cfg_t cfg;
