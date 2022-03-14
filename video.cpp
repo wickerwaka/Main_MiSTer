@@ -10,6 +10,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <math.h>
 
 #include "hardware.h"
 #include "user_io.h"
@@ -1092,12 +1093,12 @@ static bool get_video_info(bool force, VideoInfo *video_info)
 
 	spi_uio_cmd_cont(UIO_GET_VRES);
 	uint16_t res = spi_w(0);
-	if ((nres != res) || force)
+	//if ((nres != res) || force)
 	{
 		changed = (nres != res);
 		nres = res;
-		video_info->width = spi_w(0) | (spi_w(0) << 16);
-		video_info->height = spi_w(0) | (spi_w(0) << 16);
+		video_info->width = spi_w(0);
+		video_info->height = spi_w(0);
 		video_info->htime = spi_w(0) | (spi_w(0) << 16);
 		video_info->vtime = spi_w(0) | (spi_w(0) << 16);
 		video_info->ptime = spi_w(0) | (spi_w(0) << 16);
@@ -1105,6 +1106,11 @@ static bool get_video_info(bool force, VideoInfo *video_info)
 		video_info->interlaced = ( res & 0x100 ) != 0;
 		video_info->rotated = ( res & 0x200 ) != 0;
 	}
+
+	video_info->htime = (video_info->htime >> 8) + ((video_info->htime >> 7) & 1);
+	video_info->vtime = (video_info->vtime >> 4) + ((video_info->vtime >> 3) & 1);
+	video_info->ptime = (video_info->ptime >> 4) + ((video_info->ptime >> 3) & 1);
+	video_info->vtimeh = (video_info->vtimeh >> 4) + ((video_info->vtimeh >> 3) & 1);
 
 	DisableIO();
 
@@ -1220,25 +1226,80 @@ static void video_scaling_adjust(const VideoInfo *vi)
 	minimig_set_adjust(2);
 }
 
+static void video_geometry_adjust(const VideoInfo *vi, const vmode_custom_t *vm)
+{
+	float PAR = 1.0f;
+
+	int32_t disp_width = vm->item[1];
+	int32_t disp_height = vm->item[5];
+
+	int32_t core_width = vi->width;
+	int32_t core_height = vi->height;
+
+	float hratio = (disp_height / core_height) + 1;
+
+	hratio = floorf(hratio);
+
+	int32_t output_height = (int32_t)( core_height * hratio );
+	int32_t output_width = (int32_t)( core_width * hratio * PAR );
+
+	int32_t border_height = ( disp_height - output_height ) / 2;
+	int32_t border_width = ( disp_width - output_width ) / 2;
+
+	int32_t cropped_height = core_height;
+	
+	if (border_height < 0)
+	{
+		cropped_height = disp_height / hratio;
+		border_height = 0;
+		output_height = disp_height;
+	}
+
+	int32_t cropped_border = ( core_height - cropped_height ) / 2;
+	int32_t cropped_offset = 0;
+
+	if( cropped_offset > cropped_border ) cropped_offset = cropped_border + 5;
+	if( cropped_offset < -cropped_border ) cropped_offset = -cropped_border;
+
+	spi_uio_cmd_cont(UIO_SETGEO);
+	spi_w(1);
+	spi_w(border_width);
+	spi_w(border_width + output_width - 1);
+	spi_w(border_height);
+	spi_w(border_height + output_height - 1);
+	spi_w(0);
+	spi_w(0);
+	spi_w(cropped_border + cropped_offset);
+	spi_w(cropped_border - cropped_offset);
+	DisableIO();
+}
+
+
 void video_mode_adjust()
 {
 	static bool force = false;
 
 	VideoInfo video_info;
+	memset(&video_info, 0, sizeof(video_info));
 
-	const bool vid_changed = get_video_info(force, &video_info);
+	get_video_info(force, &video_info);
 
-	if (vid_changed || force)
+	const bool geo_changed = video_info.height != current_video_info.height || video_info.width != current_video_info.width;
+	const bool timing_changed = video_info.vtime != current_video_info.vtime;
+
+	if (geo_changed || force)
 	{
 		show_video_info(&video_info, &v_cur);
 		video_scaling_adjust(&video_info);
+
+		video_geometry_adjust(&video_info, &v_cur);
 
 		current_video_info = video_info;
 	}
 	force = false;
 
 	const uint32_t vtime = video_info.vtime;
-	if (vid_changed && vtime && cfg.vsync_adjust && !is_menu())
+	if (timing_changed && vtime && cfg.vsync_adjust && !is_menu())
 	{
 		printf("\033[1;33madjust_video_mode(%u): vsync_adjust=%d", vtime, cfg.vsync_adjust);
 

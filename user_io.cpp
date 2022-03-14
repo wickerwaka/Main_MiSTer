@@ -3162,7 +3162,7 @@ void user_io_poll()
 			}
 		}
 
-		res_timer = GetTimer(500);
+		res_timer = GetTimer(10);
 		if (!minimig_get_adjust())
 		{
 			if (is_minimig()) minimig_adjust_vsize(0);
