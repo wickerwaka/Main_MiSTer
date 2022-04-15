@@ -220,6 +220,8 @@ const char *config_uart_msg[] = { "      None", "       PPP", "   Console", "   
 const char *config_midilink_mode[] = {"Local", "Local", "  USB", "  UDP", "-----", "-----", "  USB" };
 const char *config_afilter_msg[] = { "Internal","Custom" };
 const char *config_smask_msg[] = { "None", "1x", "2x", "1x Rotated", "2x Rotated" };
+const char *config_vscale[] = { "Normal", "Integer", "Overscan", "Display" };
+const char *config_hscale[] = { "Normal", "Integer Narrow", "Integer Wide" };
 const char *config_scale[] = { "Normal", "V-Integer", "HV-Integer-", "HV-Integer+", "HV-Integer", "???", "???", "???" };
 
 #define DPAD_NAMES 4
@@ -2599,9 +2601,9 @@ void HandleUI(void)
 
 			case 16:
 				FileCreatePath(DOCS_DIR);
-				snprintf(Selected_tmp, sizeof(Selected_tmp), DOCS_DIR"/%s",user_io_get_core_name());
+				snprintf(Selected_tmp, sizeof(Selected_tmp), DOCS_DIR"/%s", user_io_get_core_name());
 				FileCreatePath(Selected_tmp);
-				SelectFile(Selected_tmp, "PDFTXTMD ",  SCANO_DIR | SCANO_TXT  , MENU_DOC_FILE_SELECTED, MENU_COMMON1);
+				SelectFile(Selected_tmp, "PDFTXTMD ", SCANO_DIR | SCANO_TXT  , MENU_DOC_FILE_SELECTED, MENU_COMMON1);
 				break;
 
 			case 17:
@@ -2662,7 +2664,7 @@ void HandleUI(void)
 
 	case MENU_VIDEOPROC1:
 		helptext_idx = 0;
-		menumask = 0xFFF;
+		menumask = 0x7FFF;
 		OsdSetTitle("Video Processing");
 		menustate = MENU_VIDEOPROC2;
 		parentstate = MENU_VIDEOPROC1;
@@ -2726,7 +2728,15 @@ void HandleUI(void)
 			MenuWrite(n++, s, menusub == 10, (video_get_shadow_mask_mode() <= 0) || !S_ISDIR(getFileType(SMASK_DIR)));
 
 			MenuWrite(n++);
-			MenuWrite(n++, STD_BACK, menusub == 11);
+			sprintf(s, " Vert Scale: %s", config_vscale[video_get_vscale_mode()]);
+			MenuWrite(n++, s, menusub == 11);
+			sprintf(s, " Vert Offset: %+d", video_get_voffset());
+			MenuWrite(n++, s, menusub == 12, video_get_vscale_mode() != 2);
+			sprintf(s, " Horz Scale: %s", config_hscale[video_get_hscale_mode()]);
+			MenuWrite(n++, s, menusub == 13);
+
+			MenuWrite(n++);
+			MenuWrite(n++, STD_BACK, menusub == 14);
 
 			if (!adjvisible) break;
 			firstmenu += adjvisible;
@@ -2755,11 +2765,6 @@ void HandleUI(void)
 
 		if (plus || minus)
 		{
-			if (menusub == 9)
-			{
-				video_set_shadow_mask_mode(video_get_shadow_mask_mode() + (plus ? 1 : -1));
-			}
-
 			switch (menusub)
 			{
 			case 2:
@@ -2781,6 +2786,9 @@ void HandleUI(void)
 				}
 				break;
 
+			case 9:
+				video_set_shadow_mask_mode(video_get_shadow_mask_mode() + (plus ? 1 : -1));
+				break;
 			case 10:
 				if (video_get_shadow_mask_mode() > 0)
 				{
@@ -2788,6 +2796,19 @@ void HandleUI(void)
 					video_set_shadow_mask(newfile ? newfile : "");
 				}
 				break;
+
+			case 11:
+				video_set_vscale_mode(video_get_vscale_mode() + (plus ? 1 : -1));
+				break;
+
+			case 12:
+				video_set_voffset(video_get_voffset() + (plus ? 1 : -1));
+				break;
+
+			case 13:
+				video_set_hscale_mode(video_get_hscale_mode() + (plus ? 1 : -1));
+				break;
+
 			}
 
 			menustate = parentstate;
@@ -2863,6 +2884,21 @@ void HandleUI(void)
 				break;
 
 			case 11:
+				video_set_vscale_mode(video_get_vscale_mode() + 1);
+				menustate = parentstate;
+				break;
+
+			case 12:
+				video_set_voffset(video_get_voffset() + 1);
+				menustate = parentstate;
+				break;
+
+			case 13:
+				video_set_hscale_mode(video_get_hscale_mode() + 1);
+				menustate = parentstate;
+				break;
+
+			case 14:
 				menusub = 5;
 				menustate = MENU_COMMON1;
 				break;

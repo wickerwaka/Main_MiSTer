@@ -9,11 +9,16 @@ struct VideoInfo
 {
     uint32_t width;
 	uint32_t height;
+
+	uint32_t aspect_x;
+	uint32_t aspect_y;
+	
 	uint32_t htime;
 	uint32_t vtime;
 	uint32_t ptime;
 	uint32_t vtimeh;
 
+	bool stable;
     bool interlaced;
     bool rotated;
 };
@@ -33,6 +38,13 @@ void  video_set_shadow_mask_mode(int n);
 char* video_get_shadow_mask(int only_name = 1);
 void  video_set_shadow_mask(const char *name);
 void  video_loadPreset(char *name);
+
+int video_get_vscale_mode();
+int video_get_hscale_mode();
+void video_set_vscale_mode(int n);
+void video_set_hscale_mode(int n);
+int video_get_voffset();
+void video_set_voffset(int n);
 
 void  video_mode_load();
 void  video_mode_adjust();

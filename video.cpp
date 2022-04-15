@@ -104,6 +104,8 @@ struct vmode_custom_t
 static vmode_custom_t v_cur = {}, v_def = {}, v_pal = {}, v_ntsc = {};
 static int vmode_def = 0, vmode_pal = 0, vmode_ntsc = 0;
 
+void calculate_cvt(int horiz_pixels, int vert_pixels, float refresh_rate, int reduced_blanking, vmode_custom_t *vmode);
+
 static uint32_t getPLLdiv(uint32_t div)
 {
 	if (div & 1) return 0x20000 | (((div / 2) + 1) << 8) | (div / 2);
@@ -785,6 +787,42 @@ static void loadShadowMaskCfg()
 	}
 }
 
+int vscale_mode = 0;
+int hscale_mode = 0;
+int voffset = 0;
+
+
+int video_get_vscale_mode() { return vscale_mode; }
+int video_get_hscale_mode() { return hscale_mode; }
+
+static void video_geometry_adjust(const VideoInfo *vi, const vmode_custom_t *vm);
+static void video_resolution_adjust(const VideoInfo *vi, const vmode_custom_t *vm);
+
+void video_set_vscale_mode(int n)
+{
+	if( n < 0 ) vscale_mode = 3;
+	else if( n > 3 ) vscale_mode = 0; 
+	else vscale_mode = n;
+
+	video_resolution_adjust(&current_video_info, &v_def);
+	video_geometry_adjust(&current_video_info, &v_cur);
+}
+
+void video_set_hscale_mode(int n)
+{
+	if( n < 0 ) hscale_mode = 2;
+	else if( n > 2 ) hscale_mode = 0; 
+	else hscale_mode = n;
+
+	video_geometry_adjust(&current_video_info, &v_cur);
+}
+
+int video_get_voffset() { return voffset; }
+void video_set_voffset(int v)
+{
+	voffset = v;
+	video_geometry_adjust(&current_video_info, &v_cur);
+}
 
 #define IS_NEWLINE(c) (((c) == '\r') || ((c) == '\n'))
 #define IS_WHITESPACE(c) (IS_NEWLINE(c) || ((c) == ' ') || ((c) == '\t'))
@@ -1093,24 +1131,57 @@ static bool get_video_info(bool force, VideoInfo *video_info)
 
 	spi_uio_cmd_cont(UIO_GET_VRES);
 	uint16_t res = spi_w(0);
-	//if ((nres != res) || force)
+	if (res & 0x8000)
 	{
-		changed = (nres != res);
-		nres = res;
-		video_info->width = spi_w(0);
-		video_info->height = spi_w(0);
-		video_info->htime = spi_w(0) | (spi_w(0) << 16);
-		video_info->vtime = spi_w(0) | (spi_w(0) << 16);
-		video_info->ptime = spi_w(0) | (spi_w(0) << 16);
-		video_info->vtimeh = spi_w(0) | (spi_w(0) << 16);
-		video_info->interlaced = ( res & 0x100 ) != 0;
-		video_info->rotated = ( res & 0x200 ) != 0;
-	}
+		if ((nres != res))
+		{
+			changed = (nres != res);
+			nres = res;
+			video_info->stable = ( res & 0x100 ) != 0;
+			video_info->interlaced = ( res & 0x200 ) != 0;
+			video_info->rotated = ( res & 0x400 ) != 0;
 
-	video_info->htime = (video_info->htime >> 8) + ((video_info->htime >> 7) & 1);
-	video_info->vtime = (video_info->vtime >> 4) + ((video_info->vtime >> 3) & 1);
-	video_info->ptime = (video_info->ptime >> 4) + ((video_info->ptime >> 3) & 1);
-	video_info->vtimeh = (video_info->vtimeh >> 4) + ((video_info->vtimeh >> 3) & 1);
+			video_info->width = spi_w(0);
+			video_info->height = spi_w(0);
+
+			video_info->aspect_x = spi_w(0);
+			video_info->aspect_y = spi_w(0);
+
+			if (video_info->stable)
+			{
+				video_info->htime = spi_w(0) | (spi_w(0) << 16);
+				video_info->vtime = spi_w(0) | (spi_w(0) << 16);
+				video_info->ptime = spi_w(0) | (spi_w(0) << 16);
+				video_info->vtimeh = spi_w(0) | (spi_w(0) << 16);
+			}
+			else
+			{
+				video_info->htime = 0;
+				video_info->vtime = 0;
+				video_info->ptime = 0;
+				video_info->vtimeh = 0;
+			}
+		}
+	}
+	else
+	{
+		if ((nres != res) || force)
+		{
+			changed = true; //(nres != res);
+			nres = res;
+			video_info->stable = true;
+			video_info->aspect_x = 4;
+			video_info->aspect_y = 3;
+			video_info->width = spi_w(0) | (spi_w(0) << 16);
+			video_info->height = spi_w(0) | (spi_w(0) << 16);
+			video_info->htime = spi_w(0) | (spi_w(0) << 16);
+			video_info->vtime = spi_w(0) | (spi_w(0) << 16);
+			video_info->ptime = spi_w(0) | (spi_w(0) << 16);
+			video_info->vtimeh = spi_w(0) | (spi_w(0) << 16);
+			video_info->interlaced = ( res & 0x100 ) != 0;
+			video_info->rotated = ( res & 0x200 ) != 0;
+		}
+	}
 
 	DisableIO();
 
@@ -1177,11 +1248,36 @@ static void show_video_info(const VideoInfo *vi, const vmode_custom_t *vm)
 	}
 }
 
-static void video_scaling_adjust(const VideoInfo *vi)
+static void video_resolution_adjust(const VideoInfo *vi, const vmode_custom_t *vm)
+{
+	if( video_get_vscale_mode() != 3 )
+	{
+		set_video(&v_def, 0.0f);
+		return;
+	}
+
+	int w = vm->item[1];
+	int h = vm->item[5];
+	float aspect = w / (float)h;
+
+	int scale = h / vi->height;
+
+	if( scale == 0 ) return;
+
+	int disp_h = vi->height * scale;
+	int disp_w = (int)(disp_h * aspect);
+
+	vmode_custom_t new_mode;
+	calculate_cvt( disp_w, disp_h, 60.0f, 1, &new_mode);
+	setPLL(new_mode.Fpix, &new_mode);
+	set_video(&new_mode, 0.0f);
+}
+
+static void video_scaling_adjust(const VideoInfo *vi, const vmode_custom_t *vm)
 {
 	const uint32_t height = vi->rotated ? vi->width : vi->height;
 
-	uint32_t scrh = v_cur.item[5];
+	uint32_t scrh = vm->item[5];
 	if (scrh)
 	{
 		if (cfg.vscale_mode && height)
@@ -1206,7 +1302,7 @@ static void video_scaling_adjust(const VideoInfo *vi)
 		}
 	}
 
-	uint32_t scrw = v_cur.item[1];
+	uint32_t scrw = vm->item[1];
 	if (scrw)
 	{
 		if (cfg.vscale_border && !(cfg.vscale_mode && height))
@@ -1228,25 +1324,58 @@ static void video_scaling_adjust(const VideoInfo *vi)
 
 static void video_geometry_adjust(const VideoInfo *vi, const vmode_custom_t *vm)
 {
-	float PAR = 1.0f;
-
 	int32_t disp_width = vm->item[1];
 	int32_t disp_height = vm->item[5];
 
 	int32_t core_width = vi->width;
 	int32_t core_height = vi->height;
 
-	float hratio = (disp_height / core_height) + 1;
+	float aspect = vi->aspect_x / (float)vi->aspect_y;
+	float core_aspect = core_width / (float)core_height;
 
-	hratio = floorf(hratio);
+	float pixel_aspect = aspect / core_aspect;
+
+	float hratio = (disp_height / (float)core_height);
+
+	switch( video_get_vscale_mode() )
+	{
+		case 0:
+		case 3:
+			break;
+
+		case 1:
+			hratio = floorf(hratio);
+			break;
+
+		case 2:
+			hratio = ceilf(hratio);
+			break;
+	}
+
+	float wratio = hratio * pixel_aspect;
+
+	switch( video_get_hscale_mode() )
+	{
+		case 0:
+			break;
+		
+		case 1:
+			wratio = floorf(wratio);
+			break;
+
+		case 2:
+			wratio = ceilf(wratio);
+			break;
+	}
 
 	int32_t output_height = (int32_t)( core_height * hratio );
-	int32_t output_width = (int32_t)( core_width * hratio * PAR );
+	int32_t output_width = (int32_t)( core_width * wratio );
 
 	int32_t border_height = ( disp_height - output_height ) / 2;
 	int32_t border_width = ( disp_width - output_width ) / 2;
 
 	int32_t cropped_height = core_height;
+	int32_t cropped_width = core_width;
 	
 	if (border_height < 0)
 	{
@@ -1255,11 +1384,21 @@ static void video_geometry_adjust(const VideoInfo *vi, const vmode_custom_t *vm)
 		output_height = disp_height;
 	}
 
-	int32_t cropped_border = ( core_height - cropped_height ) / 2;
-	int32_t cropped_offset = 0;
+	if (border_width < 0)
+	{
+		cropped_width = disp_width / wratio;
+		border_width = 0;
+		output_width = disp_width;
+	}
 
-	if( cropped_offset > cropped_border ) cropped_offset = cropped_border + 5;
-	if( cropped_offset < -cropped_border ) cropped_offset = -cropped_border;
+	int32_t cropped_hborder = ( core_height - cropped_height ) / 2;
+	
+	int32_t cropped_offset = video_get_voffset();
+
+	if( cropped_offset > cropped_hborder ) cropped_offset = cropped_hborder;
+	if( cropped_offset < -cropped_hborder ) cropped_offset = -cropped_hborder;
+
+	int32_t cropped_wborder = ( core_width - cropped_width ) / 2;
 
 	spi_uio_cmd_cont(UIO_SETGEO);
 	spi_w(1);
@@ -1267,36 +1406,41 @@ static void video_geometry_adjust(const VideoInfo *vi, const vmode_custom_t *vm)
 	spi_w(border_width + output_width - 1);
 	spi_w(border_height);
 	spi_w(border_height + output_height - 1);
-	spi_w(0);
-	spi_w(0);
-	spi_w(cropped_border + cropped_offset);
-	spi_w(cropped_border - cropped_offset);
+	spi_w(cropped_wborder);
+	spi_w(cropped_wborder);
+	spi_w(cropped_hborder + cropped_offset);
+	spi_w(cropped_hborder - cropped_offset);
 	DisableIO();
 }
-
 
 void video_mode_adjust()
 {
 	static bool force = false;
 
 	VideoInfo video_info;
-	memset(&video_info, 0, sizeof(video_info));
 
-	get_video_info(force, &video_info);
+	const bool changed = get_video_info(force, &video_info);
+	force = false;
 
-	const bool geo_changed = video_info.height != current_video_info.height || video_info.width != current_video_info.width;
+	if (!changed) return;
+
+	if( video_info.stable )
+	{
+		video_resolution_adjust(&video_info, &v_def);
+	}
+
+	video_scaling_adjust(&video_info, &v_cur);
+
+	video_geometry_adjust(&video_info, &v_cur);
+	force = false;
+
+	if (!video_info.stable) return;
+
+	show_video_info(&video_info, &v_cur);
+
 	const bool timing_changed = video_info.vtime != current_video_info.vtime;
 
-	if (geo_changed || force)
-	{
-		show_video_info(&video_info, &v_cur);
-		video_scaling_adjust(&video_info);
-
-		video_geometry_adjust(&video_info, &v_cur);
-
-		current_video_info = video_info;
-	}
-	force = false;
+	current_video_info = video_info;
 
 	const uint32_t vtime = video_info.vtime;
 	if (timing_changed && vtime && cfg.vsync_adjust && !is_menu())
@@ -2108,4 +2252,206 @@ void video_cmd(char *cmd)
 bool video_is_rotated()
 {
 	return current_video_info.rotated;
+}
+
+
+enum AspectRatio
+{
+    AR_4x3 = 0,
+    AR_16x9,
+    AR_16x10,
+    AR_5x4,
+    AR_15x9,
+
+    AR_UNKNOWN,
+};
+
+static constexpr float CELL_GRAN_RND = 8.0f;
+
+static AspectRatio determine_aspect(float w, float h)
+{
+    const float arx[] = { 4, 16, 16, 5, 15 };
+    const float ary[] = { 3, 9, 10, 4, 9 };
+
+    for( int ar = AR_4x3; ar != AR_UNKNOWN; ar++ )
+    {
+        float w_calc = CELL_GRAN_RND * roundf(h * arx[ar] / ary[ar]) / CELL_GRAN_RND;
+        if( w_calc == w )
+        {
+            return (AspectRatio)ar;
+        }
+    }
+
+    return AR_UNKNOWN;
+}
+
+void calculate_cvt(int horiz_pixels, int vert_pixels, float refresh_rate, int reduced_blanking, vmode_custom_t *vmode)
+{
+    float CLOCK_STEP;
+    float MIN_V_BPORCH;
+    float REFRESH_MULTIPLIER;
+
+    float H_SYNC_PER              = 0.08;
+    float MIN_V_PORCH_RND         = 3;
+    float MIN_VSYNC_BP            = 550;
+    float RB_H_BLANK              = 160;
+    float RB_H_SYNC               = 32;
+    float RB_MIN_V_BLANK          = 460;
+    float RB_V_FPORCH             = 3;
+    float C_PRIME                 = 30;
+    float M_PRIME                 = 300;
+
+    float CELL_GRAN               = 8.4999;
+
+
+    if (reduced_blanking == 0)
+    {
+        CLOCK_STEP          = 0.25;
+        MIN_V_BPORCH        = 6;
+        RB_H_BLANK          = 160;
+        RB_H_SYNC           = 32;
+        RB_MIN_V_BLANK      = 460;
+        RB_V_FPORCH         = 3;
+        REFRESH_MULTIPLIER  = 1;
+    }
+    else if (reduced_blanking == 1)
+    {
+        CLOCK_STEP          = 0.25;
+        MIN_V_BPORCH        = 6;
+        RB_H_BLANK          = 160;
+        RB_H_SYNC           = 32;
+        RB_MIN_V_BLANK      = 460;
+        RB_V_FPORCH         = 3;
+        REFRESH_MULTIPLIER  = 1;
+    }
+    else if (reduced_blanking == 2)
+    {
+        CLOCK_STEP          = 0.001;
+        MIN_V_BPORCH        = 6;
+        RB_H_BLANK          = 80;
+        RB_H_SYNC           = 32;
+        RB_MIN_V_BLANK      = 460;
+        RB_V_FPORCH         = 1;
+        REFRESH_MULTIPLIER  = 1;
+    }
+
+    // Input parameters
+    float H_PIXELS            = horiz_pixels;
+    float V_LINES             = vert_pixels;
+    float IP_FREQ_RQD         = refresh_rate;
+
+    // 5.2 Computation of Common Parameters
+    float V_FIELD_RATE_RQD    = IP_FREQ_RQD;
+
+    float H_PIXELS_RND        = floorf(H_PIXELS / CELL_GRAN_RND) * CELL_GRAN_RND;
+
+    float TOTAL_ACTIVE_PIXELS = H_PIXELS_RND;
+
+    float V_LINES_RND         = floorf(V_LINES);
+
+    float V_SYNC_RND = 8;
+    if (reduced_blanking != 2)
+    {
+        float ver_pixels = V_LINES_RND;
+        switch (determine_aspect(H_PIXELS_RND, ver_pixels))
+        {
+            case AR_4x3: V_SYNC_RND = 4; break;
+            case AR_16x9: V_SYNC_RND = 5; break;
+            case AR_16x10: V_SYNC_RND = 6; break;
+            case AR_5x4: V_SYNC_RND = 7; break;
+            case AR_15x9: V_SYNC_RND = 7; break;
+            default: V_SYNC_RND = 10; break;
+        }
+    }
+
+    float V_BLANK, V_FRONT_PORCH, V_BACK_PORCH, TOTAL_V_LINES;
+    float H_BLANK, H_SYNC, H_BACK_PORCH, H_FRONT_PORCH;
+    float TOTAL_PIXELS, ACT_PIXEL_FREQ;
+
+    if (reduced_blanking == 0)
+    {
+        // 5.3 Computation of CRT Timing Parameters
+        float H_PERIOD_EST = ((1 / V_FIELD_RATE_RQD) - MIN_VSYNC_BP / 1000000.0) / (V_LINES_RND + MIN_V_PORCH_RND) * 1000000.0;
+
+        float V_SYNC_BP = floorf(MIN_VSYNC_BP / H_PERIOD_EST) + 1;
+        if (V_SYNC_BP < (V_SYNC_RND + MIN_V_BPORCH))
+        {
+            V_SYNC_BP = V_SYNC_RND + MIN_V_BPORCH;
+        }
+
+        V_BLANK = V_SYNC_BP + MIN_V_PORCH_RND;
+        V_FRONT_PORCH = MIN_V_PORCH_RND;
+        V_BACK_PORCH = V_SYNC_BP - V_SYNC_RND;
+
+        TOTAL_V_LINES = V_LINES_RND + V_SYNC_BP + MIN_V_PORCH_RND;
+
+        float IDEAL_DUTY_CYCLE = C_PRIME - (M_PRIME * H_PERIOD_EST/1000);
+
+        if (IDEAL_DUTY_CYCLE < 20)
+        {
+            H_BLANK = floorf(TOTAL_ACTIVE_PIXELS * 20 / (100-20) / (2 * CELL_GRAN_RND)) * (2 * CELL_GRAN_RND);
+        }
+        else
+        {
+            H_BLANK = floorf(TOTAL_ACTIVE_PIXELS * IDEAL_DUTY_CYCLE / (100 - IDEAL_DUTY_CYCLE) / (2 * CELL_GRAN_RND)) * (2 * CELL_GRAN_RND);
+        }
+
+        TOTAL_PIXELS = TOTAL_ACTIVE_PIXELS + H_BLANK;
+
+        H_SYNC = floorf(H_SYNC_PER * TOTAL_PIXELS / CELL_GRAN_RND) * CELL_GRAN_RND;
+        H_BACK_PORCH = H_BLANK / 2;
+        H_FRONT_PORCH = H_BLANK - H_SYNC - H_BACK_PORCH;
+
+        ACT_PIXEL_FREQ = CLOCK_STEP * floorf(TOTAL_PIXELS / H_PERIOD_EST / CLOCK_STEP);
+    }
+    else
+    {
+        float H_PERIOD_EST = ((1000000.0 / V_FIELD_RATE_RQD) - RB_MIN_V_BLANK) / V_LINES_RND;
+        H_BLANK = RB_H_BLANK;
+
+        float VBI_LINES = floorf(RB_MIN_V_BLANK / H_PERIOD_EST) + 1;
+
+        float RB_MIN_VBI = RB_V_FPORCH + V_SYNC_RND + MIN_V_BPORCH;
+        float ACT_VBI_LINES = (VBI_LINES < RB_MIN_VBI) ? RB_MIN_VBI : VBI_LINES;
+
+        TOTAL_V_LINES = ACT_VBI_LINES + V_LINES_RND;
+
+        TOTAL_PIXELS = RB_H_BLANK + TOTAL_ACTIVE_PIXELS;
+
+        ACT_PIXEL_FREQ = CLOCK_STEP * floorf((V_FIELD_RATE_RQD * TOTAL_V_LINES * TOTAL_PIXELS / 1000000 * REFRESH_MULTIPLIER) / CLOCK_STEP);
+
+        if (reduced_blanking == 2)
+        {
+            V_BLANK = ACT_VBI_LINES;
+            V_FRONT_PORCH = ACT_VBI_LINES - V_SYNC_RND - 6;
+            V_BACK_PORCH  = 6;
+
+            H_SYNC = 32;
+            H_BACK_PORCH = 40;
+            H_FRONT_PORCH = H_BLANK - H_SYNC - H_BACK_PORCH;
+        }
+        else
+        {
+            V_BLANK = ACT_VBI_LINES;
+            V_FRONT_PORCH = 3;
+            V_BACK_PORCH  = ACT_VBI_LINES - V_FRONT_PORCH - V_SYNC_RND;
+
+            H_SYNC = 32;
+            H_BACK_PORCH = 80;
+            H_FRONT_PORCH = H_BLANK - H_SYNC - H_BACK_PORCH;
+        }
+    }
+
+    memset(vmode, 0, sizeof(vmode_custom_t));
+
+	vmode->item[0] = 1;
+	vmode->item[1] = (uint32_t)TOTAL_ACTIVE_PIXELS;
+	vmode->item[2] = (uint32_t)H_FRONT_PORCH;
+	vmode->item[3] = (uint32_t)H_SYNC;
+	vmode->item[4] = (uint32_t)H_BACK_PORCH;
+	vmode->item[5] = (uint32_t)V_LINES_RND;
+	vmode->item[6] = (uint32_t)V_FRONT_PORCH;
+	vmode->item[7] = (uint32_t)V_SYNC_RND;
+	vmode->item[8] = (uint32_t)V_BACK_PORCH;
+	vmode->Fpix = ACT_PIXEL_FREQ;
 }
