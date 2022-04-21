@@ -21,7 +21,32 @@ struct VideoInfo
 	bool stable;
     bool interlaced;
     bool rotated;
+	bool pixel_aspect;
 };
+
+enum VScaleMode : int8_t
+{
+	VSCALE_FREE = 0,
+	VSCALE_25,
+	VSCALE_50,
+	VSCALE_INTEGER,
+	VSCALE_OVERSCAN,
+	VSCALE_DISPLAY,
+
+	VSCALE_MIN_VALUE = VSCALE_FREE,
+	VSCALE_MAX_VALUE = VSCALE_DISPLAY,
+};
+
+enum HScaleMode : int8_t
+{
+	HSCALE_FREE = 0,
+	HSCALE_NARROW,
+	HSCALE_WIDE,
+
+	HSCALE_MIN_VALUE = HSCALE_FREE,
+	HSCALE_MAX_VALUE = HSCALE_WIDE
+};
+
 
 int   video_get_scaler_flt(int type);
 void  video_set_scaler_flt(int type, int n);
@@ -39,10 +64,10 @@ char* video_get_shadow_mask(int only_name = 1);
 void  video_set_shadow_mask(const char *name);
 void  video_loadPreset(char *name);
 
-int video_get_vscale_mode();
-int video_get_hscale_mode();
-void video_set_vscale_mode(int n);
-void video_set_hscale_mode(int n);
+VScaleMode video_get_vscale_mode();
+HScaleMode video_get_hscale_mode();
+void video_set_vscale_mode(VScaleMode n);
+void video_set_hscale_mode(HScaleMode n);
 int video_get_voffset();
 void video_set_voffset(int n);
 

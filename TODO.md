@@ -1,0 +1,11 @@
+- Interlace support in scaling
+- PSX pixel aspect ratio
+- Aspect ratio in menu, need to support full and custom
+- Make menus look pretty
+- Fix exiting the menu
+- Pixel repeat video_mode parsing
+- Pass pixel repeat to fpga
+- Display scaling factor
+- Amiga testing
+- Test framebuffer modes
+- Test rotation

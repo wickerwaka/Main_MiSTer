@@ -66,33 +66,35 @@ struct vmode_t
 {
 	uint32_t vpar[8];
 	double Fpix;
+	float pixel_aspect;
 };
 
 vmode_t vmodes[] =
 {
-	{ { 1280, 110,  40, 220,  720,  5,  5, 20 },  74.25  }, //0
-	{ { 1024,  24, 136, 160,  768,  3,  6, 29 },  65     }, //1
-	{ {  720,  16,  62,  60,  480,  9,  6, 30 },  27     }, //2
-	{ {  720,  12,  64,  68,  576,  5,  5, 39 },  27     }, //3
-	{ { 1280,  48, 112, 248, 1024,  1,  3, 38 }, 108     }, //4
-	{ {  800,  40, 128,  88,  600,  1,  4, 23 },  40     }, //5
-	{ {  640,  16,  96,  48,  480, 10,  2, 33 },  25.175 }, //6
-	{ { 1280, 440,  40, 220,  720,  5,  5, 20 },  74.25  }, //7
-	{ { 1920,  88,  44, 148, 1080,  4,  5, 36 }, 148.5   }, //8
-	{ { 1920, 528,  44, 148, 1080,  4,  5, 36 }, 148.5   }, //9
-	{ { 1366,  70, 143, 213,  768,  3,  3, 24 },  85.5   }, //10
-	{ { 1024,  40, 104, 144,  600,  1,  3, 18 },  48.96  }, //11
-	{ { 1920,  48,  32,  80, 1440,  2,  4, 38 }, 185.203 }, //12
-	{ { 2048,  48,  32,  80, 1536,  2,  4, 38 }, 209.318 }, //13
+	{ { 1280, 110,  40, 220,  720,  5,  5, 20 },  74.25,  1.0f }, //0
+	{ { 1024,  24, 136, 160,  768,  3,  6, 29 },  65,     1.0f }, //1
+	{ {  720,  16,  62,  60,  480,  9,  6, 30 },  27,     1.0f }, //2
+	{ {  720,  12,  64,  68,  576,  5,  5, 39 },  27,     1.0f }, //3
+	{ { 1280,  48, 112, 248, 1024,  1,  3, 38 }, 108,     1.0f }, //4
+	{ {  800,  40, 128,  88,  600,  1,  4, 23 },  40,     1.0f }, //5
+	{ {  640,  16,  96,  48,  480, 10,  2, 33 },  25.175, 1.0f }, //6
+	{ { 1280, 440,  40, 220,  720,  5,  5, 20 },  74.25,  1.0f }, //7
+	{ { 1920,  88,  44, 148, 1080,  4,  5, 36 }, 148.5,   1.0f }, //8
+	{ { 1920, 528,  44, 148, 1080,  4,  5, 36 }, 148.5,   1.0f }, //9
+	{ { 1366,  70, 143, 213,  768,  3,  3, 24 },  85.5,   1.0f }, //10
+	{ { 1024,  40, 104, 144,  600,  1,  3, 18 },  48.96,  1.0f }, //11
+	{ { 1920,  48,  32,  80, 1440,  2,  4, 38 }, 185.203, 1.0f }, //12
+	{ { 2048,  48,  32,  80, 1536,  2,  4, 38 }, 209.318, 1.0f }, //13
+	{ { 1280,  24,  16,  40, 1440,  3,  5, 33 }, 120.750, 2.0f }, //14
 };
 #define VMODES_NUM (sizeof(vmodes) / sizeof(vmodes[0]))
 
 vmode_t tvmodes[] =
 {
-	{{ 640, 30, 60, 70, 240,  4, 4, 14 }, 12.587 }, //NTSC 15K
-	{{ 640, 16, 96, 48, 480,  8, 4, 33 }, 25.175 }, //NTSC 31K
-	{{ 640, 30, 60, 70, 288,  6, 4, 14 }, 12.587 }, //PAL 15K
-	{{ 640, 16, 96, 48, 576,  2, 4, 42 }, 25.175 }, //PAL 31K
+	{{ 640, 30, 60, 70, 240,  4, 4, 14 }, 12.587, 1.0f }, //NTSC 15K
+	{{ 640, 16, 96, 48, 480,  8, 4, 33 }, 25.175, 1.0f }, //NTSC 31K
+	{{ 640, 30, 60, 70, 288,  6, 4, 14 }, 12.587, 1.0f }, //PAL 15K
+	{{ 640, 16, 96, 48, 576,  2, 4, 42 }, 25.175, 1.0f }, //PAL 31K
 };
 
 struct vmode_custom_t
@@ -103,6 +105,41 @@ struct vmode_custom_t
 
 static vmode_custom_t v_cur = {}, v_def = {}, v_pal = {}, v_ntsc = {};
 static int vmode_def = 0, vmode_pal = 0, vmode_ntsc = 0;
+
+
+struct ScalerFilter
+{
+	char mode;
+	char filename[1023];
+};
+static_assert(sizeof(ScalerFilter) == 1024);
+
+struct ScalerConfig
+{
+	ScalerFilter filter[3];
+
+	VScaleMode vscale_mode;
+	HScaleMode hscale_mode;
+	int8_t voffset;
+	int8_t aspect;
+};
+
+static ScalerConfig scaler_cfg;
+
+struct FilterPhase
+{
+	short t[4];
+};
+
+static constexpr int N_PHASES = 256;
+
+struct VideoFilter
+{
+	bool is_adaptive;
+	FilterPhase phases[N_PHASES];
+	FilterPhase adaptive_phases[N_PHASES];
+};
+
 
 void calculate_cvt(int horiz_pixels, int vert_pixels, float refresh_rate, int reduced_blanking, vmode_custom_t *vmode);
 
@@ -203,28 +240,6 @@ static void setPLL(double Fout, vmode_custom_t *v)
 	v->Fpix = Fpix;
 }
 
-struct ScalerFilter
-{
-	char mode;
-	char filename[1023];
-};
-
-static ScalerFilter scaler_flt[3];
-
-struct FilterPhase
-{
-	short t[4];
-};
-
-static constexpr int N_PHASES = 256;
-
-struct VideoFilter
-{
-	bool is_adaptive;
-	FilterPhase phases[N_PHASES];
-	FilterPhase adaptive_phases[N_PHASES];
-};
-
 static bool scale_phases(FilterPhase out_phases[N_PHASES], FilterPhase *in_phases, int in_count)
 {
 	if (!in_count)
@@ -259,7 +274,7 @@ static bool read_video_filter(int type, VideoFilter *out)
 	int scale = 2;
 
 	static char filename[1024];
-	snprintf(filename, sizeof(filename), COEFF_DIR"/%s", scaler_flt[type].filename);
+	snprintf(filename, sizeof(filename), COEFF_DIR"/%s", scaler_cfg.filter[type].filename);
 
 	if (FileOpenTextReader(&reader, filename))
 	{
@@ -293,7 +308,7 @@ static bool read_video_filter(int type, VideoFilter *out)
 	}
 
 	printf( "Filter \'%s\', phases: %d adaptive: %s\n",
-			scaler_flt[type].filename,
+			scaler_cfg.filter[type].filename,
 			is_adaptive ? count / 2 : count,
 			is_adaptive ? "true" : "false" );
 
@@ -389,6 +404,7 @@ static void set_vfilter(int force)
 {
 	static int last_flags = 0;
 
+	const ScalerFilter *filter = scaler_cfg.filter;
 	int flt_flags = spi_uio_cmd_cont(UIO_SET_FLTNUM);
 	if (!flt_flags || (!force && last_flags == flt_flags))
 	{
@@ -399,7 +415,7 @@ static void set_vfilter(int force)
 	last_flags = flt_flags;
 	printf("video_set_filter: flt_flags=%d\n", flt_flags);
 
-	spi8(scaler_flt[0].mode);
+	spi8(filter[0].mode);
 	DisableIO();
 
 	VideoFilter horiz, vert;
@@ -409,7 +425,7 @@ static void set_vfilter(int force)
 	if (valid)
 	{
 		//vertical/scanlines filter
-		int vert_flt = ((flt_flags & 0x30) && scaler_flt[VFILTER_SCAN].mode) ? VFILTER_SCAN : (scaler_flt[VFILTER_VERT].mode) ? VFILTER_VERT : VFILTER_HORZ;
+		int vert_flt = ((flt_flags & 0x30) && filter[VFILTER_SCAN].mode) ? VFILTER_SCAN : (filter[VFILTER_VERT].mode) ? VFILTER_VERT : VFILTER_HORZ;
 		if (!read_video_filter(vert_flt, &vert))
 		{
 			vert = horiz;
@@ -445,12 +461,12 @@ static void setScaler()
 
 int video_get_scaler_flt(int type)
 {
-	return scaler_flt[type].mode;
+	return scaler_cfg.filter[type].mode;
 }
 
 char* video_get_scaler_coeff(int type, int only_name)
 {
-	char *path = scaler_flt[type].filename;
+	char *path = scaler_cfg.filter[type].filename;
 	if (only_name)
 	{
 		char *p = strrchr(path, '/');
@@ -459,55 +475,62 @@ char* video_get_scaler_coeff(int type, int only_name)
 	return path;
 }
 
-static char scaler_cfg[128] = { 0 };
+static char scaler_cfg_filename[128] = { 0 };
+
+static void saveScalerCfg()
+{
+	FileSaveConfig(scaler_cfg_filename, &scaler_cfg, sizeof(scaler_cfg));
+}
 
 void video_set_scaler_flt(int type, int n)
 {
-	scaler_flt[type].mode = (char)n;
-	FileSaveConfig(scaler_cfg, &scaler_flt, sizeof(scaler_flt));
-	spi_uio_cmd8(UIO_SET_FLTNUM, scaler_flt[0].mode);
+	scaler_cfg.filter[type].mode = (char)n;
+	saveScalerCfg();
+	spi_uio_cmd8(UIO_SET_FLTNUM, scaler_cfg.filter[0].mode);
 	set_vfilter(1);
 }
 
 void video_set_scaler_coeff(int type, const char *name)
 {
-	strcpy(scaler_flt[type].filename, name);
-	FileSaveConfig(scaler_cfg, &scaler_flt, sizeof(scaler_flt));
+	strcpy(scaler_cfg.filter[type].filename, name);
+	saveScalerCfg();
 	setScaler();
 	user_io_send_buttons(1);
 }
 
 static void loadScalerCfg()
 {
-	sprintf(scaler_cfg, "%s_scaler.cfg", user_io_get_core_name());
-	memset(scaler_flt, 0, sizeof(scaler_cfg));
-	if (!FileLoadConfig(scaler_cfg, &scaler_flt, sizeof(scaler_flt)) || scaler_flt[0].mode > 1)
+	ScalerFilter *filter = scaler_cfg.filter;
+	sprintf(scaler_cfg_filename, "%s_scaler.cfg", user_io_get_core_name());
+
+	memset(&scaler_cfg, 0, sizeof(scaler_cfg));
+	if (!FileLoadConfig(scaler_cfg_filename, &scaler_cfg, sizeof(scaler_cfg)) || filter[0].mode > 1)
 	{
-		memset(scaler_flt, 0, sizeof(scaler_flt));
+		memset(&scaler_cfg, 0, sizeof(scaler_cfg));
 	}
 
-	if (!scaler_flt[VFILTER_HORZ].filename[0] && cfg.vfilter_default[0])
+	if (!filter[VFILTER_HORZ].filename[0] && cfg.vfilter_default[0])
 	{
-		strcpy(scaler_flt[VFILTER_HORZ].filename, cfg.vfilter_default);
-		scaler_flt[VFILTER_HORZ].mode = 1;
+		strcpy(filter[VFILTER_HORZ].filename, cfg.vfilter_default);
+		filter[VFILTER_HORZ].mode = 1;
 	}
 
-	if (!scaler_flt[VFILTER_VERT].filename[0] && cfg.vfilter_vertical_default[0])
+	if (!filter[VFILTER_VERT].filename[0] && cfg.vfilter_vertical_default[0])
 	{
-		strcpy(scaler_flt[VFILTER_VERT].filename, cfg.vfilter_vertical_default);
-		scaler_flt[VFILTER_VERT].mode = 1;
+		strcpy(filter[VFILTER_VERT].filename, cfg.vfilter_vertical_default);
+		filter[VFILTER_VERT].mode = 1;
 	}
 
-	if (!scaler_flt[VFILTER_SCAN].filename[0] && cfg.vfilter_scanlines_default[0])
+	if (!filter[VFILTER_SCAN].filename[0] && cfg.vfilter_scanlines_default[0])
 	{
-		strcpy(scaler_flt[VFILTER_SCAN].filename, cfg.vfilter_scanlines_default);
-		scaler_flt[VFILTER_SCAN].mode = 1;
+		strcpy(filter[VFILTER_SCAN].filename, cfg.vfilter_scanlines_default);
+		filter[VFILTER_SCAN].mode = 1;
 	}
 
 	VideoFilter null;
-	if (!read_video_filter(VFILTER_HORZ, &null)) memset(&scaler_flt[VFILTER_HORZ], 0, sizeof(scaler_flt[VFILTER_HORZ]));
-	if (!read_video_filter(VFILTER_VERT, &null)) memset(&scaler_flt[VFILTER_VERT], 0, sizeof(scaler_flt[VFILTER_VERT]));
-	if (!read_video_filter(VFILTER_SCAN, &null)) memset(&scaler_flt[VFILTER_SCAN], 0, sizeof(scaler_flt[VFILTER_SCAN]));
+	if (!read_video_filter(VFILTER_HORZ, &null)) memset(&filter[VFILTER_HORZ], 0, sizeof(filter[VFILTER_HORZ]));
+	if (!read_video_filter(VFILTER_VERT, &null)) memset(&filter[VFILTER_VERT], 0, sizeof(filter[VFILTER_VERT]));
+	if (!read_video_filter(VFILTER_SCAN, &null)) memset(&filter[VFILTER_SCAN], 0, sizeof(filter[VFILTER_SCAN]));
 }
 
 static char gamma_cfg[1024] = { 0 };
@@ -787,40 +810,45 @@ static void loadShadowMaskCfg()
 	}
 }
 
-int vscale_mode = 0;
-int hscale_mode = 0;
-int voffset = 0;
-
-
-int video_get_vscale_mode() { return vscale_mode; }
-int video_get_hscale_mode() { return hscale_mode; }
+VScaleMode video_get_vscale_mode() { return scaler_cfg.vscale_mode; }
+HScaleMode video_get_hscale_mode() { return scaler_cfg.hscale_mode; }
 
 static void video_geometry_adjust(const VideoInfo *vi, const vmode_custom_t *vm);
 static void video_resolution_adjust(const VideoInfo *vi, const vmode_custom_t *vm);
 
-void video_set_vscale_mode(int n)
+void video_set_vscale_mode(VScaleMode n)
 {
-	if( n < 0 ) vscale_mode = 3;
-	else if( n > 3 ) vscale_mode = 0; 
-	else vscale_mode = n;
+	if( n < VSCALE_MIN_VALUE ) scaler_cfg.vscale_mode = VSCALE_MAX_VALUE;
+	else if( n > VSCALE_MAX_VALUE ) scaler_cfg.vscale_mode = VSCALE_MIN_VALUE; 
+	else scaler_cfg.vscale_mode = n;
+
+	saveScalerCfg();
 
 	video_resolution_adjust(&current_video_info, &v_def);
 	video_geometry_adjust(&current_video_info, &v_cur);
 }
 
-void video_set_hscale_mode(int n)
+void video_set_hscale_mode(HScaleMode n)
 {
-	if( n < 0 ) hscale_mode = 2;
-	else if( n > 2 ) hscale_mode = 0; 
-	else hscale_mode = n;
+	if( n < HSCALE_MIN_VALUE ) scaler_cfg.hscale_mode = HSCALE_MAX_VALUE;
+	else if( n > HSCALE_MAX_VALUE ) scaler_cfg.hscale_mode = HSCALE_MIN_VALUE; 
+	else scaler_cfg.hscale_mode = n;
+
+	saveScalerCfg();
 
 	video_geometry_adjust(&current_video_info, &v_cur);
 }
 
-int video_get_voffset() { return voffset; }
+int video_get_voffset() { return scaler_cfg.voffset; }
+
 void video_set_voffset(int v)
 {
-	voffset = v;
+	if( v > 16 ) scaler_cfg.voffset = 16;
+	else if (v < -16) scaler_cfg.voffset = -16;
+	else scaler_cfg.voffset = v;
+
+	saveScalerCfg();
+
 	video_geometry_adjust(&current_video_info, &v_cur);
 }
 
@@ -1147,6 +1175,9 @@ static bool get_video_info(bool force, VideoInfo *video_info)
 			video_info->aspect_x = spi_w(0);
 			video_info->aspect_y = spi_w(0);
 
+			video_info->pixel_aspect = (video_info->aspect_x & 0x1000) != 0;
+			video_info->aspect_x &= ~0x1000;
+
 			if (video_info->stable)
 			{
 				video_info->htime = spi_w(0) | (spi_w(0) << 16);
@@ -1170,6 +1201,7 @@ static bool get_video_info(bool force, VideoInfo *video_info)
 			changed = true; //(nres != res);
 			nres = res;
 			video_info->stable = true;
+			video_info->pixel_aspect = false;
 			video_info->aspect_x = 4;
 			video_info->aspect_y = 3;
 			video_info->width = spi_w(0) | (spi_w(0) << 16);
@@ -1250,7 +1282,7 @@ static void show_video_info(const VideoInfo *vi, const vmode_custom_t *vm)
 
 static void video_resolution_adjust(const VideoInfo *vi, const vmode_custom_t *vm)
 {
-	if( video_get_vscale_mode() != 3 )
+	if( video_get_vscale_mode() != VSCALE_DISPLAY )
 	{
 		set_video(&v_def, 0.0f);
 		return;
@@ -1333,22 +1365,30 @@ static void video_geometry_adjust(const VideoInfo *vi, const vmode_custom_t *vm)
 	float aspect = vi->aspect_x / (float)vi->aspect_y;
 	float core_aspect = core_width / (float)core_height;
 
-	float pixel_aspect = aspect / core_aspect;
+	float pixel_aspect = vi->pixel_aspect ? aspect : (aspect / core_aspect);
 
 	float hratio = (disp_height / (float)core_height);
 
 	switch( video_get_vscale_mode() )
 	{
-		case 0:
-		case 3:
+		case VSCALE_FREE:
+		case VSCALE_DISPLAY:
 			break;
 
-		case 1:
+		case VSCALE_INTEGER:
 			hratio = floorf(hratio);
 			break;
 
-		case 2:
+		case VSCALE_OVERSCAN:
 			hratio = ceilf(hratio);
+			break;
+		
+		case VSCALE_25:
+			hratio = floorf(hratio * 4.0f) / 4.0f;
+			break;
+
+		case VSCALE_50:
+			hratio = floorf(hratio * 2.0f) / 2.0f;
 			break;
 	}
 
@@ -1356,14 +1396,14 @@ static void video_geometry_adjust(const VideoInfo *vi, const vmode_custom_t *vm)
 
 	switch( video_get_hscale_mode() )
 	{
-		case 0:
+		case HSCALE_FREE:
 			break;
 		
-		case 1:
+		case HSCALE_NARROW:
 			wratio = floorf(wratio);
 			break;
 
-		case 2:
+		case HSCALE_WIDE:
 			wratio = ceilf(wratio);
 			break;
 	}
@@ -2295,21 +2335,16 @@ void calculate_cvt(int horiz_pixels, int vert_pixels, float refresh_rate, int re
     float MIN_V_PORCH_RND         = 3;
     float MIN_VSYNC_BP            = 550;
     float RB_H_BLANK              = 160;
-    float RB_H_SYNC               = 32;
     float RB_MIN_V_BLANK          = 460;
     float RB_V_FPORCH             = 3;
     float C_PRIME                 = 30;
     float M_PRIME                 = 300;
-
-    float CELL_GRAN               = 8.4999;
-
 
     if (reduced_blanking == 0)
     {
         CLOCK_STEP          = 0.25;
         MIN_V_BPORCH        = 6;
         RB_H_BLANK          = 160;
-        RB_H_SYNC           = 32;
         RB_MIN_V_BLANK      = 460;
         RB_V_FPORCH         = 3;
         REFRESH_MULTIPLIER  = 1;
@@ -2319,7 +2354,6 @@ void calculate_cvt(int horiz_pixels, int vert_pixels, float refresh_rate, int re
         CLOCK_STEP          = 0.25;
         MIN_V_BPORCH        = 6;
         RB_H_BLANK          = 160;
-        RB_H_SYNC           = 32;
         RB_MIN_V_BLANK      = 460;
         RB_V_FPORCH         = 3;
         REFRESH_MULTIPLIER  = 1;
@@ -2329,7 +2363,6 @@ void calculate_cvt(int horiz_pixels, int vert_pixels, float refresh_rate, int re
         CLOCK_STEP          = 0.001;
         MIN_V_BPORCH        = 6;
         RB_H_BLANK          = 80;
-        RB_H_SYNC           = 32;
         RB_MIN_V_BLANK      = 460;
         RB_V_FPORCH         = 1;
         REFRESH_MULTIPLIER  = 1;
@@ -2364,7 +2397,7 @@ void calculate_cvt(int horiz_pixels, int vert_pixels, float refresh_rate, int re
         }
     }
 
-    float V_BLANK, V_FRONT_PORCH, V_BACK_PORCH, TOTAL_V_LINES;
+    float V_FRONT_PORCH, V_BACK_PORCH, TOTAL_V_LINES;
     float H_BLANK, H_SYNC, H_BACK_PORCH, H_FRONT_PORCH;
     float TOTAL_PIXELS, ACT_PIXEL_FREQ;
 
@@ -2379,7 +2412,6 @@ void calculate_cvt(int horiz_pixels, int vert_pixels, float refresh_rate, int re
             V_SYNC_BP = V_SYNC_RND + MIN_V_BPORCH;
         }
 
-        V_BLANK = V_SYNC_BP + MIN_V_PORCH_RND;
         V_FRONT_PORCH = MIN_V_PORCH_RND;
         V_BACK_PORCH = V_SYNC_BP - V_SYNC_RND;
 
@@ -2422,7 +2454,6 @@ void calculate_cvt(int horiz_pixels, int vert_pixels, float refresh_rate, int re
 
         if (reduced_blanking == 2)
         {
-            V_BLANK = ACT_VBI_LINES;
             V_FRONT_PORCH = ACT_VBI_LINES - V_SYNC_RND - 6;
             V_BACK_PORCH  = 6;
 
@@ -2432,7 +2463,6 @@ void calculate_cvt(int horiz_pixels, int vert_pixels, float refresh_rate, int re
         }
         else
         {
-            V_BLANK = ACT_VBI_LINES;
             V_FRONT_PORCH = 3;
             V_BACK_PORCH  = ACT_VBI_LINES - V_FRONT_PORCH - V_SYNC_RND;
 

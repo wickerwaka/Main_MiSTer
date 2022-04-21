@@ -220,8 +220,8 @@ const char *config_uart_msg[] = { "      None", "       PPP", "   Console", "   
 const char *config_midilink_mode[] = {"Local", "Local", "  USB", "  UDP", "-----", "-----", "  USB" };
 const char *config_afilter_msg[] = { "Internal","Custom" };
 const char *config_smask_msg[] = { "None", "1x", "2x", "1x Rotated", "2x Rotated" };
-const char *config_vscale[] = { "Normal", "Integer", "Overscan", "Display" };
-const char *config_hscale[] = { "Normal", "Integer Narrow", "Integer Wide" };
+const char *config_vscale[] = { "Free", "0.25 Pixel", "0.5 Pixel", "Integer", "Overscan", "Display" };
+const char *config_hscale[] = { "Free", "Integer Narrow", "Integer Wide" };
 const char *config_scale[] = { "Normal", "V-Integer", "HV-Integer-", "HV-Integer+", "HV-Integer", "???", "???", "???" };
 
 #define DPAD_NAMES 4
@@ -2731,7 +2731,7 @@ void HandleUI(void)
 			sprintf(s, " Vert Scale: %s", config_vscale[video_get_vscale_mode()]);
 			MenuWrite(n++, s, menusub == 11);
 			sprintf(s, " Vert Offset: %+d", video_get_voffset());
-			MenuWrite(n++, s, menusub == 12, video_get_vscale_mode() != 2);
+			MenuWrite(n++, s, menusub == 12, video_get_vscale_mode() != VSCALE_OVERSCAN);
 			sprintf(s, " Horz Scale: %s", config_hscale[video_get_hscale_mode()]);
 			MenuWrite(n++, s, menusub == 13);
 
@@ -2798,7 +2798,7 @@ void HandleUI(void)
 				break;
 
 			case 11:
-				video_set_vscale_mode(video_get_vscale_mode() + (plus ? 1 : -1));
+				video_set_vscale_mode((VScaleMode)(video_get_vscale_mode() + (plus ? 1 : -1)));
 				break;
 
 			case 12:
@@ -2806,7 +2806,7 @@ void HandleUI(void)
 				break;
 
 			case 13:
-				video_set_hscale_mode(video_get_hscale_mode() + (plus ? 1 : -1));
+				video_set_hscale_mode((HScaleMode)(video_get_hscale_mode() + (plus ? 1 : -1)));
 				break;
 
 			}
@@ -2884,7 +2884,7 @@ void HandleUI(void)
 				break;
 
 			case 11:
-				video_set_vscale_mode(video_get_vscale_mode() + 1);
+				video_set_vscale_mode((VScaleMode)(video_get_vscale_mode() + 1));
 				menustate = parentstate;
 				break;
 
@@ -2894,7 +2894,7 @@ void HandleUI(void)
 				break;
 
 			case 13:
-				video_set_hscale_mode(video_get_hscale_mode() + 1);
+				video_set_hscale_mode((HScaleMode)(video_get_hscale_mode() + 1));
 				menustate = parentstate;
 				break;
 
@@ -2930,7 +2930,7 @@ void HandleUI(void)
 				sprintf(binary,"/media/fat/linux/glow --style dark  \"%s\" | less -R",path);
 			}
 
-			sprintf(cmd, "#!/bin/bash\nexport LC_ALL=en_US.UTF-8\nexport HOME=/root\nexport LESSKEY=/media/fat/linux/lesskey\ncd $(dirname \"%s\")\n%s \necho \"Press any key to continue\"\n", path, binary  );
+			snprintf(cmd, sizeof(cmd), "#!/bin/bash\nexport LC_ALL=en_US.UTF-8\nexport HOME=/root\nexport LESSKEY=/media/fat/linux/lesskey\ncd $(dirname \"%s\")\n%s \necho \"Press any key to continue\"\n", path, binary  );
 			printf("CMD [%s]\n",cmd);
 			unlink("/tmp/script");
 			FileSave("/tmp/script", cmd, strlen(cmd));
