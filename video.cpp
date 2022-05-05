@@ -21,6 +21,7 @@
 #include "video.h"
 #include "input.h"
 #include "shmem.h"
+#include "util.h"
 
 #include "support.h"
 #include "lib/imlib2/Imlib2.h"
@@ -66,35 +67,44 @@ struct vmode_t
 {
 	uint32_t vpar[8];
 	double Fpix;
-	float pixel_aspect;
+	bool pixel_repetition;
 };
 
 vmode_t vmodes[] =
 {
-	{ { 1280, 110,  40, 220,  720,  5,  5, 20 },  74.25,  1.0f }, //0
-	{ { 1024,  24, 136, 160,  768,  3,  6, 29 },  65,     1.0f }, //1
-	{ {  720,  16,  62,  60,  480,  9,  6, 30 },  27,     1.0f }, //2
-	{ {  720,  12,  64,  68,  576,  5,  5, 39 },  27,     1.0f }, //3
-	{ { 1280,  48, 112, 248, 1024,  1,  3, 38 }, 108,     1.0f }, //4
-	{ {  800,  40, 128,  88,  600,  1,  4, 23 },  40,     1.0f }, //5
-	{ {  640,  16,  96,  48,  480, 10,  2, 33 },  25.175, 1.0f }, //6
-	{ { 1280, 440,  40, 220,  720,  5,  5, 20 },  74.25,  1.0f }, //7
-	{ { 1920,  88,  44, 148, 1080,  4,  5, 36 }, 148.5,   1.0f }, //8
-	{ { 1920, 528,  44, 148, 1080,  4,  5, 36 }, 148.5,   1.0f }, //9
-	{ { 1366,  70, 143, 213,  768,  3,  3, 24 },  85.5,   1.0f }, //10
-	{ { 1024,  40, 104, 144,  600,  1,  3, 18 },  48.96,  1.0f }, //11
-	{ { 1920,  48,  32,  80, 1440,  2,  4, 38 }, 185.203, 1.0f }, //12
-	{ { 2048,  48,  32,  80, 1536,  2,  4, 38 }, 209.318, 1.0f }, //13
-	{ { 1280,  24,  16,  40, 1440,  3,  5, 33 }, 120.750, 2.0f }, //14
+	{ { 1280, 110,  40, 220,  720,  5,  5, 20 },  74.25,  false }, //0
+	{ { 1024,  24, 136, 160,  768,  3,  6, 29 },  65,     false }, //1
+	{ {  720,  16,  62,  60,  480,  9,  6, 30 },  27,     false }, //2
+	{ {  720,  12,  64,  68,  576,  5,  5, 39 },  27,     false }, //3
+	{ { 1280,  48, 112, 248, 1024,  1,  3, 38 }, 108,     false }, //4
+	{ {  800,  40, 128,  88,  600,  1,  4, 23 },  40,     false }, //5
+	{ {  640,  16,  96,  48,  480, 10,  2, 33 },  25.175, false }, //6
+	{ { 1280, 440,  40, 220,  720,  5,  5, 20 },  74.25,  false }, //7
+	{ { 1920,  88,  44, 148, 1080,  4,  5, 36 }, 148.5,   false }, //8
+	{ { 1920, 528,  44, 148, 1080,  4,  5, 36 }, 148.5,   false }, //9
+	{ { 1366,  70, 143, 213,  768,  3,  3, 24 },  85.5,   false }, //10
+	{ { 1024,  40, 104, 144,  600,  1,  3, 18 },  48.96,  false }, //11
+	{ { 1920,  48,  32,  80, 1440,  2,  4, 38 }, 185.203, false }, //12
+	{ { 2048,  48,  32,  80, 1536,  2,  4, 38 }, 209.318, false }, //13
+	{ { 2560,  48,  32,  80, 1440,  3,  5, 33 }, 241.5,   true  }, //14
+	{ { 2240,  48,  32,  80, 1680,  3,  4, 41 }, 248.75,  true }, //15
+	{ { 1920,  48,  32,  80, 1440,  2,  4, 38 }, 185.203, true }, //12
 };
 #define VMODES_NUM (sizeof(vmodes) / sizeof(vmodes[0]))
 
 vmode_t tvmodes[] =
 {
-	{{ 640, 30, 60, 70, 240,  4, 4, 14 }, 12.587, 1.0f }, //NTSC 15K
-	{{ 640, 16, 96, 48, 480,  8, 4, 33 }, 25.175, 1.0f }, //NTSC 31K
-	{{ 640, 30, 60, 70, 288,  6, 4, 14 }, 12.587, 1.0f }, //PAL 15K
-	{{ 640, 16, 96, 48, 576,  2, 4, 42 }, 25.175, 1.0f }, //PAL 31K
+	{{ 640, 30, 60, 70, 240,  4, 4, 14 }, 12.587, false }, //NTSC 15K
+	{{ 640, 16, 96, 48, 480,  8, 4, 33 }, 25.175, false }, //NTSC 31K
+	{{ 640, 30, 60, 70, 288,  6, 4, 14 }, 12.587, false }, //PAL 15K
+	{{ 640, 16, 96, 48, 576,  2, 4, 42 }, 25.175, false }, //PAL 31K
+};
+
+enum VModeParam
+{
+	VMODE_HPOL = 21,
+	VMODE_VPOL = 22,
+	VMODE_PR = 23
 };
 
 struct vmode_custom_t
@@ -121,7 +131,7 @@ struct ScalerConfig
 	VScaleMode vscale_mode;
 	HScaleMode hscale_mode;
 	int8_t voffset;
-	int8_t aspect;
+	AspectMode aspect_mode;
 };
 
 static ScalerConfig scaler_cfg;
@@ -193,7 +203,13 @@ static void setPLL(double Fout, vmode_custom_t *v)
 	double fvco, ko;
 	uint32_t m, c;
 
-	printf("Calculate PLL for %.4f MHz:\n", Fout);
+	if (v->item[VMODE_PR])
+	{
+		Fout /= 2.0;
+		printf("Calculate PLL for %.4f MHz (Pixel Doubled):\n", Fout);
+	}
+	else
+		printf("Calculate PLL for %.4f MHz:\n", Fout);
 
 	if (!findPLLpar(Fout, &c, &m, &ko))
 	{
@@ -237,7 +253,14 @@ static void setPLL(double Fout, vmode_custom_t *v)
 	v->item[19] = 7;
 	v->item[20] = k;
 
-	v->Fpix = Fpix;
+	if (v->item[VMODE_PR])
+	{
+		v->Fpix = Fpix * 2.0;
+	}
+	else
+	{
+		v->Fpix = Fpix;
+	}
 }
 
 static bool scale_phases(FilterPhase out_phases[N_PHASES], FilterPhase *in_phases, int in_count)
@@ -812,6 +835,7 @@ static void loadShadowMaskCfg()
 
 VScaleMode video_get_vscale_mode() { return scaler_cfg.vscale_mode; }
 HScaleMode video_get_hscale_mode() { return scaler_cfg.hscale_mode; }
+AspectMode video_get_aspect_mode() { return scaler_cfg.aspect_mode; }
 
 static void video_geometry_adjust(const VideoInfo *vi, const vmode_custom_t *vm);
 static void video_resolution_adjust(const VideoInfo *vi, const vmode_custom_t *vm);
@@ -846,6 +870,17 @@ void video_set_voffset(int v)
 	if( v > 16 ) scaler_cfg.voffset = 16;
 	else if (v < -16) scaler_cfg.voffset = -16;
 	else scaler_cfg.voffset = v;
+
+	saveScalerCfg();
+
+	video_geometry_adjust(&current_video_info, &v_cur);
+}
+
+void video_set_aspect_mode(AspectMode v)
+{
+	if( v > 3) scaler_cfg.aspect_mode = ASPECT_MIN_VALUE;
+	else if (v < 0) scaler_cfg.aspect_mode = ASPECT_MAX_VALUE;
+	else scaler_cfg.aspect_mode = v;
 
 	saveScalerCfg();
 
@@ -973,21 +1008,29 @@ static void set_video(vmode_custom_t *v, double Fpix)
 		v_fix.item[5] += v_cur.item[6] - v_fix.item[6];
 		v_fix.item[5] += v_cur.item[8] - v_fix.item[8];
 	}
+	else if (v_cur.item[VMODE_PR])
+	{
+		v_fix.item[1] /= 2;
+		v_fix.item[2] /= 2;
+		v_fix.item[3] /= 2;
+		v_fix.item[4] /= 2;
+	}
 
 	printf("Send HDMI parameters:\n");
 	spi_uio_cmd_cont(UIO_SET_VIDEO);
 	printf("video: ");
 	for (int i = 1; i <= 8; i++)
 	{
+		if (i == 1) spi_w((v_cur.item[VMODE_PR] << 15) | v_fix.item[i]);
 		//hsync polarity
-		if (i == 3) spi_w((!!v_cur.item[21] << 15) | v_fix.item[i]);
+		else if (i == 3) spi_w((!!v_cur.item[VMODE_HPOL] << 15) | v_fix.item[i]);
 		//vsync polarity
-		else if (i == 7) spi_w((!!v_cur.item[22] << 15) | v_fix.item[i]);
+		else if (i == 7) spi_w((!!v_cur.item[VMODE_VPOL] << 15) | v_fix.item[i]);
 		else spi_w(v_fix.item[i]);
 		printf("%d(%d), ", v_cur.item[i], v_fix.item[i]);
 	}
 
-	printf("%chsync, %cvsync", !!v_cur.item[21]?'+':'-', !!v_cur.item[22]?'+':'-');
+	printf("%chsync, %cvsync", !!v_cur.item[VMODE_HPOL]?'+':'-', !!v_cur.item[VMODE_VPOL]?'+':'-');
 
 	if(Fpix) setPLL(Fpix, &v_cur);
 
@@ -1027,65 +1070,72 @@ static void set_video(vmode_custom_t *v, double Fpix)
 
 static int parse_custom_video_mode(char* vcfg, vmode_custom_t *v)
 {
-	int khz = 0;
-	int cnt = 0;
-	char *orig = vcfg;
-	while (*vcfg)
+	char *tokens[32];
+	uint32_t val[32];
+
+	char work[1024];
+	char *next;
+
+	int cnt = str_tokenize(strcpyz(work, vcfg), ",", tokens, ARRAY_COUNT(tokens));
+
+	for (int i = 0; i < cnt; i++)
 	{
-		char *next;
-		if (cnt == 9 && v->item[0] == 1)
+		val[i] = strtoul(tokens[i], &next, 0);
+		if (*next)
 		{
-			double Fpix = khz ? strtoul(vcfg, &next, 0)/1000.f : strtod(vcfg, &next);
-			if (vcfg == next || (Fpix < 2.f || Fpix > 300.f))
-			{
-				printf("Error parsing video_mode parameter: ""%s""\n", orig);
-				return -1;
-			}
-
-			setPLL(Fpix, v);
-			//read sync polarities if present
-			if (*next == ',') next++;
-			vcfg = next;
-			cnt = 21;
-			continue;
-		}
-
-		uint32_t val = strtoul(vcfg, &next, 0);
-		if (vcfg == next || (*next != ',' && *next))
-		{
-			printf("Error parsing video_mode parameter: ""%s""\n", orig);
+			printf("Error parsing video_mode parameter: ""%s""\n", vcfg);
 			return -1;
 		}
-
-		if (!cnt && val >= 100)
-		{
-			v->item[cnt++] = 1;
-			khz = 1;
-		}
-		if (cnt < 32) v->item[cnt] = val;
-		if (*next == ',') next++;
-		vcfg = next;
-		cnt++;
 	}
+
+	memset(v, 0, sizeof(vmode_custom_t));
 
 	if (cnt == 1)
 	{
-		printf("Set predefined video_mode to %d\n", v->item[0]);
+		v->item[0] = val[0];
 		return v->item[0];
 	}
-
-	if ((v->item[0] == 0 && cnt < 21) || (v->item[0] == 1 && cnt < 9))
+	else if (cnt == 4 || cnt == 5)
 	{
-		printf("Incorrect amount of items in video_mode parameter: %d\n", cnt);
+		calculate_cvt(val[0], val[1], val[2], val[3], v);
+		if (cnt == 5) v->item[VMODE_PR] = val[4];
+	}
+	else if (cnt >= 21)
+	{
+		for (int i = 0; i < cnt; i++)
+			v->item[i] = val[i];
+	}
+	else if (cnt >= 9 && cnt <= 11)
+	{
+		v->item[0] = 1;
+		for (int i = 0; i < 8; i++)
+			v->item[i+1] = val[i];
+
+		v->Fpix = val[8] / 1000.0;
+		
+		if (cnt == 10)
+		{
+			v->item[VMODE_PR] = val[9];
+		}
+		else if (cnt == 11)
+		{
+			v->item[VMODE_HPOL] = val[9];
+			v->item[VMODE_VPOL] = val[10];
+		}
+		else if (cnt == 12)
+		{
+			v->item[VMODE_HPOL] = val[9];
+			v->item[VMODE_VPOL] = val[10];
+			v->item[VMODE_PR] = val[11];
+		}
+	}
+	else
+	{
+		printf("Error parsing video_mode parameter: ""%s""\n", vcfg);
 		return -1;
 	}
 
-	if (v->item[0] > 1)
-	{
-		printf("Incorrect video_mode parameter\n");
-		return -1;
-	}
-
+	setPLL(v->Fpix, v);
 	return -2;
 }
 
@@ -1097,6 +1147,7 @@ static int store_custom_video_mode(char* vcfg, vmode_custom_t *v)
 	uint mode = (ret < 0) ? 0 : ret;
 	if (mode >= VMODES_NUM) mode = 0;
 	for (int i = 0; i < 8; i++) v->item[i + 1] = vmodes[mode].vpar[i];
+	v->item[VMODE_PR] = vmodes[mode].pixel_repetition;
 	setPLL(vmodes[mode].Fpix, v);
 
 	return ret >= 0;
@@ -1168,6 +1219,7 @@ static bool get_video_info(bool force, VideoInfo *video_info)
 			video_info->stable = ( res & 0x100 ) != 0;
 			video_info->interlaced = ( res & 0x200 ) != 0;
 			video_info->rotated = ( res & 0x400 ) != 0;
+			video_info->pixel_aspect = ( res & 0x800 ) != 0;
 
 			video_info->width = spi_w(0);
 			video_info->height = spi_w(0);
@@ -1175,8 +1227,12 @@ static bool get_video_info(bool force, VideoInfo *video_info)
 			video_info->aspect_x = spi_w(0);
 			video_info->aspect_y = spi_w(0);
 
-			video_info->pixel_aspect = (video_info->aspect_x & 0x1000) != 0;
-			video_info->aspect_x &= ~0x1000;
+			if( video_info->aspect_x == 0 || video_info->aspect_y == 0)
+			{
+				video_info->aspect_x = 1;
+				video_info->aspect_y = 1;
+				video_info->pixel_aspect = true;
+			}
 
 			if (video_info->stable)
 			{
@@ -1282,7 +1338,7 @@ static void show_video_info(const VideoInfo *vi, const vmode_custom_t *vm)
 
 static void video_resolution_adjust(const VideoInfo *vi, const vmode_custom_t *vm)
 {
-	if( video_get_vscale_mode() != VSCALE_DISPLAY )
+	if( video_get_vscale_mode() != VSCALE_DISPLAY || video_get_aspect_mode() == 1 )
 	{
 		set_video(&v_def, 0.0f);
 		return;
@@ -1300,7 +1356,9 @@ static void video_resolution_adjust(const VideoInfo *vi, const vmode_custom_t *v
 	int disp_w = (int)(disp_h * aspect);
 
 	vmode_custom_t new_mode;
-	calculate_cvt( disp_w, disp_h, 60.0f, 1, &new_mode);
+
+	float refresh = 1000000.0 / ((vm->item[1]+vm->item[2]+vm->item[3]+vm->item[4])*(vm->item[5]+vm->item[6]+vm->item[7]+vm->item[8])/vm->Fpix);
+	calculate_cvt( disp_w, disp_h, refresh, 1, &new_mode);
 	setPLL(new_mode.Fpix, &new_mode);
 	set_video(&new_mode, 0.0f);
 }
@@ -1356,6 +1414,14 @@ static void video_scaling_adjust(const VideoInfo *vi, const vmode_custom_t *vm)
 
 static void video_geometry_adjust(const VideoInfo *vi, const vmode_custom_t *vm)
 {
+	if (video_get_aspect_mode() == 1)
+	{
+		spi_uio_cmd_cont(UIO_SETGEO);
+		spi_w(0);
+		DisableIO();
+		return;		
+	}
+
 	int32_t disp_width = vm->item[1];
 	int32_t disp_height = vm->item[5];
 
@@ -1366,8 +1432,15 @@ static void video_geometry_adjust(const VideoInfo *vi, const vmode_custom_t *vm)
 	float core_aspect = core_width / (float)core_height;
 
 	float pixel_aspect = vi->pixel_aspect ? aspect : (aspect / core_aspect);
+	if (vm->item[VMODE_PR])
+	{
+		pixel_aspect /= 2.0f;
+		disp_width /= 2;
+	}
 
+	float max_wratio = disp_width / ( core_width * pixel_aspect );
 	float hratio = (disp_height / (float)core_height);
+	if( hratio > max_wratio) hratio = max_wratio;
 
 	switch( video_get_vscale_mode() )
 	{
@@ -1417,7 +1490,7 @@ static void video_geometry_adjust(const VideoInfo *vi, const vmode_custom_t *vm)
 	int32_t cropped_height = core_height;
 	int32_t cropped_width = core_width;
 	
-	if (border_height < 0)
+	if (border_height < 0) 
 	{
 		cropped_height = disp_height / hratio;
 		border_height = 0;
@@ -1466,7 +1539,7 @@ void video_mode_adjust()
 
 	if( video_info.stable )
 	{
-		video_resolution_adjust(&video_info, &v_def);
+		//video_resolution_adjust(&video_info, &v_def);
 	}
 
 	video_scaling_adjust(&video_info, &v_cur);

@@ -47,6 +47,17 @@ enum HScaleMode : int8_t
 	HSCALE_MAX_VALUE = HSCALE_WIDE
 };
 
+enum AspectMode : int8_t
+{
+	ASPECT_NORMAL = 0,
+	ASPECT_FULLSCREEN,
+	ASPECT_CUSTOM1,
+	ASPECT_CUSTOM2,
+
+	ASPECT_MIN_VALUE = ASPECT_NORMAL,
+	ASPECT_MAX_VALUE = ASPECT_CUSTOM2
+};
+
 
 int   video_get_scaler_flt(int type);
 void  video_set_scaler_flt(int type, int n);
@@ -70,6 +81,9 @@ void video_set_vscale_mode(VScaleMode n);
 void video_set_hscale_mode(HScaleMode n);
 int video_get_voffset();
 void video_set_voffset(int n);
+AspectMode video_get_aspect_mode();
+void video_set_aspect_mode(AspectMode n);
+
 
 void  video_mode_load();
 void  video_mode_adjust();

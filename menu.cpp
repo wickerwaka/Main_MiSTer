@@ -220,8 +220,8 @@ const char *config_uart_msg[] = { "      None", "       PPP", "   Console", "   
 const char *config_midilink_mode[] = {"Local", "Local", "  USB", "  UDP", "-----", "-----", "  USB" };
 const char *config_afilter_msg[] = { "Internal","Custom" };
 const char *config_smask_msg[] = { "None", "1x", "2x", "1x Rotated", "2x Rotated" };
-const char *config_vscale[] = { "Free", "0.25 Pixel", "0.5 Pixel", "Integer", "Overscan", "Display" };
-const char *config_hscale[] = { "Free", "Integer Narrow", "Integer Wide" };
+const char *config_vscale[] = { "Fill", "0.25 Pixel", "0.5 Pixel", "Integer", "Overscan", "Display" };
+const char *config_hscale[] = { "Normal", "Narrow", "Wide" };
 const char *config_scale[] = { "Normal", "V-Integer", "HV-Integer-", "HV-Integer+", "HV-Integer", "???", "???", "???" };
 
 #define DPAD_NAMES 4
@@ -2664,7 +2664,7 @@ void HandleUI(void)
 
 	case MENU_VIDEOPROC1:
 		helptext_idx = 0;
-		menumask = 0x7FFF;
+		menumask = 0xFFFF;
 		OsdSetTitle("Video Processing");
 		menustate = MENU_VIDEOPROC2;
 		parentstate = MENU_VIDEOPROC1;
@@ -2728,15 +2728,18 @@ void HandleUI(void)
 			MenuWrite(n++, s, menusub == 10, (video_get_shadow_mask_mode() <= 0) || !S_ISDIR(getFileType(SMASK_DIR)));
 
 			MenuWrite(n++);
-			sprintf(s, " Vert Scale: %s", config_vscale[video_get_vscale_mode()]);
+
+			sprintf(s, " Vert Scale: %13s", config_vscale[video_get_vscale_mode()]);
 			MenuWrite(n++, s, menusub == 11);
-			sprintf(s, " Vert Offset: %+d", video_get_voffset());
+			sprintf(s, " Vert Offset: %+12d", video_get_voffset());
 			MenuWrite(n++, s, menusub == 12, video_get_vscale_mode() != VSCALE_OVERSCAN);
-			sprintf(s, " Horz Scale: %s", config_hscale[video_get_hscale_mode()]);
+			sprintf(s, " Horz Scale: %13s", config_hscale[video_get_hscale_mode()]);
 			MenuWrite(n++, s, menusub == 13);
+			sprintf(s, " Aspect: %d", video_get_aspect_mode());
+			MenuWrite(n++, s, menusub == 14);
 
 			MenuWrite(n++);
-			MenuWrite(n++, STD_BACK, menusub == 14);
+			MenuWrite(n++, STD_BACK, menusub == 15);
 
 			if (!adjvisible) break;
 			firstmenu += adjvisible;
@@ -2807,6 +2810,10 @@ void HandleUI(void)
 
 			case 13:
 				video_set_hscale_mode((HScaleMode)(video_get_hscale_mode() + (plus ? 1 : -1)));
+				break;
+
+			case 14:
+				video_set_aspect_mode((AspectMode)(video_get_aspect_mode() + (plus ? 1 : -1)));
 				break;
 
 			}
@@ -2899,6 +2906,11 @@ void HandleUI(void)
 				break;
 
 			case 14:
+				video_set_aspect_mode((AspectMode)(video_get_aspect_mode() + 1));
+				menustate = parentstate;
+				break;
+
+			case 15:
 				menusub = 5;
 				menustate = MENU_COMMON1;
 				break;
