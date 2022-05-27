@@ -1282,6 +1282,9 @@ void user_io_init(const char *path, const char *xml)
 	user_io_read_confstr();
 	user_io_read_core_name();
 
+	uint16_t ver = user_io_sys_version();
+	printf( "Core sys version: %d.%d (0x%04x)\n", ver >> 8, ver & 0xff, ver);
+
 	cfg_parse();
 	while (cfg.waitmount[0] && !is_menu())
 	{
@@ -3981,3 +3984,13 @@ void user_io_screenshot_cmd(const char *cmd)
 
 	user_io_screenshot(cmd,0);
 }
+
+static uint16_t uio_sys_version = 0xffff;
+
+uint16_t user_io_sys_version()
+{
+	if (uio_sys_version == 0xffff) uio_sys_version = spi_uio_cmd(UIO_GET_VERSION);
+
+	return uio_sys_version;
+}
+
