@@ -72,7 +72,6 @@
 #define UIO_SHADOWMASK  0x3E
 #define UIO_GET_RUMBLE  0x3F
 #define UIO_GET_FB_PAR  0x40
-#define UIO_GET_VERSION 0x41
 
 // codes as used by 8bit for file loading from OSD
 #define FIO_FILE_TX     0x53
@@ -278,7 +277,5 @@ char is_saturn();
 
 #define HomeDir(x) user_io_get_core_path(x)
 #define CoreName user_io_get_core_name()
-
-uint16_t user_io_sys_version();
 
 #endif // USER_IO_H

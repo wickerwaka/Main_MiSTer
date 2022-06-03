@@ -1453,7 +1453,7 @@ static int store_custom_video_mode(char* vcfg, vmode_custom_t *v)
 
 	uint mode = (ret >= 0) ? ret : (support_FHD) ? 8 : 0;
 	if (mode >= VMODES_NUM) mode = 0;
-	if (vmodes[mode].pr == 1 && user_io_sys_version() == 0) mode = 8;
+	if (vmodes[mode].pr == 1 && !video_supports_pr()) mode = 8;
 	for (int i = 0; i < 8; i++) v->item[i + 1] = vmodes[mode].vpar[i];
 	v->param.vic = vmodes[mode].vic_mode;
 	v->param.pr = vmodes[mode].pr;
@@ -2618,6 +2618,15 @@ bool video_is_rotated()
 	return current_video_info.rotated;
 }
 
+static uint16_t video_version = 0xffff;
+
+bool video_supports_pr()
+{
+	if (video_version == 0xffff) video_version = spi_uio_cmd(UIO_SET_VIDEO);
+
+	return video_version != 0;
+}
+
 static constexpr int CELL_GRAN_RND = 8;
 
 static int determine_vsync(int w, int h)
@@ -2754,6 +2763,14 @@ static void video_calculate_cvt_int(int h_pixels, int v_lines, float refresh_rat
 
 static void video_calculate_cvt(int h_pixels, int v_lines, float refresh_rate, int reduced_blanking, vmode_custom_t *vmode)
 {
+	// If the resolution it too wide and the core doesn't support pixel repetition then just do 1080p
+	if (h_pixels > 2048 && !video_supports_pr())
+	{
+		printf("Pixel repetition not supported by core for %dx%d resolution, defaulting 1080p.\n", h_pixels, v_lines);
+		video_calculate_cvt(1920, 1080, refresh_rate, reduced_blanking, vmode);
+		return;
+	}
+
 	video_calculate_cvt_int(h_pixels, v_lines, refresh_rate, reduced_blanking == 1, vmode);
 	if (vmode->Fpix > 210.f && reduced_blanking == 2)
 	{
