@@ -55,6 +55,10 @@ else
 	CFLAGS += -O3
 endif
 
+ifeq ($(PROFILING),1)
+	DFLAGS += -DPROFILING
+endif
+
 $(PRJ): $(OBJ)
 	$(Q)$(info $@)
 	$(Q)$(CC) -o $@ $+ $(LFLAGS) 
