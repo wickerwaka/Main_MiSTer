@@ -4,6 +4,7 @@
 #include <string.h>
 #include <inttypes.h>
 
+#include "../../str_util.h"
 #include "../../file_io.h"
 #include "../../user_io.h"
 #include "../../spi.h"
@@ -713,7 +714,7 @@ void psx_mount_cd(int f_index, int s_index, const char *filename)
 						int bios_loaded = 0;
 
 						// load cd_bios.rom from game directory
-						sprintf(buf, "%s/", last_dir);
+						sprintfz(buf, "%s/", last_dir);
 						p = strrchr(buf, '/');
 						if (p)
 						{

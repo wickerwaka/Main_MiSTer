@@ -1300,7 +1300,7 @@ void user_io_init(const char *path, const char *xml)
 	user_io_read_confstr();
 	user_io_read_core_name();
 
-	cfg_parse();
+	cfg_parse(user_io_check_safe_mode());
 	cfg_print();
 	while (cfg.waitmount[0] && !is_menu())
 	{
@@ -2669,6 +2669,16 @@ char user_io_user_button()
 	return (cur_btn & BUTTON_USR) ? 1 : 0;
 }
 
+static int safe_mode = -1;
+bool user_io_check_safe_mode()
+{
+	if (safe_mode == -1)
+	{
+		safe_mode = (fpga_get_buttons() & BUTTON_USR) ? 1 : 0;
+	}
+	return safe_mode == 1;
+}
+
 static int vga_fb = 0;
 void set_vga_fb(int enable)
 {
@@ -2759,7 +2769,7 @@ void user_io_set_ini(int ini_num)
 		xml = NULL;
 	}
 
-	if (FileExists(cfg_get_name(ini_num)))
+	if (FileExists(cfg_get_name(false, ini_num)))
 	{
 		altcfg(ini_num);
 		fpga_load_rbf(name, NULL, xml);

@@ -2647,7 +2647,7 @@ void video_mode_adjust()
 	{
 		if (cfg_has_video_sections())
 		{
-			cfg_parse();
+			cfg_parse(false);
 			video_mode_load();
 			user_io_send_buttons(1);
 		}

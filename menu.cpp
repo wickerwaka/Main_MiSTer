@@ -45,6 +45,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <hci.h>
 #include <hci_lib.h>
 
+#include "str_util.h"
 #include "file_io.h"
 #include "osd.h"
 #include "hardware.h"
@@ -2558,7 +2559,7 @@ void HandleUI(void)
 
 			case 15:
 				FileCreatePath(DOCS_DIR);
-				snprintf(Selected_tmp, sizeof(Selected_tmp), DOCS_DIR"/%s",user_io_get_core_name());
+				snprintf(Selected_tmp, sizeof(Selected_tmp), DOCS_DIR"/%s", user_io_get_core_name());
 				FileCreatePath(Selected_tmp);
 				SelectFile(Selected_tmp, "PDFTXTMD ",  SCANO_DIR | SCANO_TXT  , MENU_DOC_FILE_SELECTED, MENU_COMMON1);
 				break;
@@ -2866,7 +2867,7 @@ void HandleUI(void)
 				sprintf(binary,"/media/fat/linux/glow --style dark  \"%s\" | less -R",path);
 			}
 
-			sprintf(cmd, "#!/bin/bash\nexport LC_ALL=en_US.UTF-8\nexport HOME=/root\nexport LESSKEY=/media/fat/linux/lesskey\ncd $(dirname \"%s\")\n%s \necho \"Press any key to continue\"\n", path, binary  );
+			sprintfz(cmd, "#!/bin/bash\nexport LC_ALL=en_US.UTF-8\nexport HOME=/root\nexport LESSKEY=/media/fat/linux/lesskey\ncd $(dirname \"%s\")\n%s \necho \"Press any key to continue\"\n", path, binary  );
 			printf("CMD [%s]\n",cmd);
 			unlink("/tmp/script");
 			FileSave("/tmp/script", cmd, strlen(cmd));
@@ -3428,7 +3429,7 @@ void HandleUI(void)
 		{
 			for (int i = 0; i < OsdGetSize() - 1; i++) OsdWrite(i, "", 0, 0);
 			flag = 1;
-			for (int i = 1; i < 4; i++) if (FileExists(cfg_get_name(i))) flag |= 1 << i;
+			for (int i = 1; i < 4; i++) if (FileExists(cfg_get_name(false, i))) flag |= 1 << i;
 			flag |= altcfg() << 4;
 			menusub = 3;
 		}

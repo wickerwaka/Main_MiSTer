@@ -34,6 +34,7 @@
 #include "malloc.h"
 #include <fcntl.h>
 #include <sys/stat.h>
+#include "../../str_util.h"
 #include "../../hardware.h"
 #include "../../fpga_io.h"
 #include "sharpmz.h"
@@ -94,7 +95,7 @@ int sharpmz_file_write(fileTYPE *file, const char *fileName)
 
 
 
-    sprintf(fullPath, "%s/%s", directoryPath, fileName);
+    sprintfz(fullPath, "%s/%s", directoryPath, fileName);
 
     const int mode = O_RDWR | O_CREAT | O_TRUNC | O_SYNC;   // No longer required as FileOpenEx has changed.  | S_IRWXU | S_IRWXG | S_IRWXO;
     ret = FileOpenEx(file, fullPath, mode);

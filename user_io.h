@@ -165,6 +165,7 @@ void user_io_read_core_name();
 void user_io_poll();
 char user_io_menu_button();
 char user_io_user_button();
+bool user_io_check_safe_mode();
 void user_io_osd_key_enable(char);
 int user_io_get_kbd_reset();
 void user_io_set_kbd_reset(int reset);
