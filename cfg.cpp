@@ -367,7 +367,7 @@ static void ini_parse_var(char* buf)
 	}
 }
 
-static void ini_parse(int alt, const char *vmode)
+static void ini_parse(bool safe_mode, int alt, const char *vmode)
 {
 	static char line[INI_LINE_SIZE];
 	int section = 0;
@@ -378,7 +378,7 @@ static void ini_parse(int alt, const char *vmode)
 	memset(line, 0, sizeof(line));
 	memset(&ini_file, 0, sizeof(ini_file));
 
-	const char *name = cfg_get_name(alt);
+	const char *name = cfg_get_name(safe_mode, alt);
 	if (!FileOpen(&ini_file, name))	return;
 
 	ini_parser_debugf("Opened file %s with size %llu bytes.", name, ini_file.size);
@@ -419,10 +419,19 @@ static constexpr int CFG_ERRORS_STRLEN = 128;
 static char cfg_errors[CFG_ERRORS_MAX][CFG_ERRORS_STRLEN];
 static int cfg_error_count = 0;
 
-const char* cfg_get_name(uint8_t alt)
+const char* cfg_get_name(bool safe_mode, uint8_t alt)
 {
 	static char name[64];
-	strcpy(name, "MiSTer.ini");
+
+	if (safe_mode)
+	{
+		strcpy(name, "MiSTer_safe.ini");
+		return name;
+	}
+	else
+	{
+		strcpy(name, "MiSTer.ini");
+	}
 
 	if (alt == 1)
 	{
@@ -435,7 +444,7 @@ const char* cfg_get_name(uint8_t alt)
 	return name;
 }
 
-void cfg_parse()
+void cfg_parse(bool safe_mode)
 {
 	memset(&cfg, 0, sizeof(cfg));
 	cfg.bootscreen = 1;
@@ -455,11 +464,11 @@ void cfg_parse()
 	has_video_sections = false;
 	using_video_section = false;
 	cfg_error_count = 0;
-	ini_parse(altcfg(), video_get_core_mode_name(1));
+	ini_parse(safe_mode, altcfg(), video_get_core_mode_name(1));
 	if (has_video_sections && !using_video_section)
 	{
 		// second pass to look for section without vrefresh
-		ini_parse(altcfg(), video_get_core_mode_name(0));
+		ini_parse(safe_mode, altcfg(), video_get_core_mode_name(0));
 	}
 
 

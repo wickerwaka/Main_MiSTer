@@ -1121,7 +1121,7 @@ void FindStorage(void)
 
 		int saveddev = device;
 		device = 0;
-		cfg_parse();
+		cfg_parse(user_io_check_safe_mode());
 		device = saveddev;
 		video_init();
 		user_io_send_buttons(1);

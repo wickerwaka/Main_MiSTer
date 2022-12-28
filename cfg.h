@@ -91,9 +91,9 @@ typedef struct {
 extern cfg_t cfg;
 
 //// functions ////
-void cfg_parse();
+void cfg_parse(bool safe_mode);
 void cfg_print();
-const char* cfg_get_name(uint8_t alt);
+const char* cfg_get_name(bool safe_mode, uint8_t alt);
 bool cfg_has_video_sections();
 
 void cfg_error(const char *fmt, ...);
