@@ -25,6 +25,51 @@ struct VideoInfo
     bool rotated;
 };
 
+// named aliases for vmode_custom_t items
+struct vmode_custom_param_t
+{
+	uint32_t mode;
+
+	// [1]
+	uint32_t hact;
+	uint32_t hfp;
+	uint32_t hs;
+	uint32_t hbp;
+
+	// [5]
+	uint32_t vact;
+	uint32_t vfp;
+	uint32_t vs;
+	uint32_t vbp;
+
+	// [9]
+	uint32_t pll[12];
+
+	// [21]
+	uint32_t hpol;
+	uint32_t vpol;
+	uint32_t vic;
+	uint32_t rb;
+	uint32_t pr;
+
+	// [26]
+	uint32_t unused[6];
+};
+
+struct vmode_custom_t
+{
+	union // anonymous
+	{
+		vmode_custom_param_t param;
+		uint32_t item[32];
+	};
+
+	double Fpix;
+};
+
+static_assert(sizeof(vmode_custom_param_t) == sizeof(vmode_custom_t::item));
+
+
 void  video_init();
 
 int   video_get_scaler_flt(int type);

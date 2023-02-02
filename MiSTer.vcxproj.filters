@@ -127,6 +127,9 @@
     <ClCompile Include="video.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="hdmi.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="joymapping.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -334,6 +337,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="video.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="hdmi.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="joymapping.h">

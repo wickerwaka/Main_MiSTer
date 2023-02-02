@@ -110,6 +110,7 @@
     <ClCompile Include="sxmlc.c" />
     <ClCompile Include="user_io.cpp" />
     <ClCompile Include="video.cpp" />
+    <ClCompile Include="hdmi.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="audio.h" />
@@ -185,6 +186,7 @@
     <ClInclude Include="sxmlc.h" />
     <ClInclude Include="user_io.h" />
     <ClInclude Include="video.h" />
+    <ClInclude Include="hdmi.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
