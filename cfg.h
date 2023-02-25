@@ -98,7 +98,14 @@ extern cfg_t cfg;
 //// functions ////
 void cfg_parse();
 void cfg_print();
+
+// Force enumeration of the ini files
+// Returns a bitfield of valid ini indexes
+int cfg_enumerate_inis();
+const char* cfg_get_filename(uint8_t alt);
 const char* cfg_get_name(uint8_t alt);
+bool cfg_get_valid(uint8_t alt);
+
 bool cfg_has_video_sections();
 
 void cfg_error(const char *fmt, ...);

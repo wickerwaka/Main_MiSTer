@@ -11,6 +11,7 @@
 #include "cfg.h"
 #include "debug.h"
 #include "file_io.h"
+#include "str_util.h"
 #include "user_io.h"
 #include "video.h"
 #include "support/arcade/mra_loader.h"
@@ -419,26 +420,114 @@ static void ini_parse(int alt, const char *vmode)
 	FileClose(&ini_file);
 }
 
+struct EnumeratedINI
+{
+	bool present;
+	char name[32];
+	char filename[64];
+};
+
+static bool s_enumerated_inis = false;
+static EnumeratedINI s_inis[4];
+
+int cfg_enumerate_inis()
+{
+	struct dirent *entry;
+	DIR *dir = 0;
+	const char *rootdir = getRootDir();
+	int valid_inis = 0;
+
+	memset( s_inis, 0, sizeof(s_inis) );
+
+	strcpyz(s_inis[0].name, "Main");
+	strcpyz(s_inis[1].name, "Alt1");
+	strcpyz(s_inis[2].name, "Alt2");
+	strcpyz(s_inis[3].name, "Alt3");
+
+	dir = opendir(rootdir);
+
+	if (dir == nullptr)
+	{
+		printf("%s directory not found\n", rootdir);
+		return 0;
+	}
+
+	for( entry = readdir(dir); entry != nullptr; entry = readdir(dir) )
+	{
+		char altname[16];
+		unsigned int altidx;
+		if (entry->d_type != DT_REG && entry->d_type != DT_LNK ) continue;
+
+		const size_t len = strlen(entry->d_name);
+		if (len < 4) continue;
+		if (strncasecmp(entry->d_name, "MiSTer", 6)) continue;
+		if (strcasecmp(entry->d_name+len-4, ".ini")) continue;
+
+		if (!strcasecmp(entry->d_name, "mister.ini"))
+		{
+			s_inis[0].present = true;
+			strcpyz(s_inis[0].filename, entry->d_name);
+			valid_inis |= 1 << 0;
+		}
+		else if (!strcasecmp(entry->d_name, "mister_alt.ini"))
+		{
+			s_inis[1].present = true;
+			strcpyz(s_inis[1].filename, entry->d_name);
+			valid_inis |= 1 << 1;
+		}
+		else if (sscanf(entry->d_name, "%*[^_]_%[^_]_%u", altname, &altidx) == 2)
+		{
+			if (altidx < 4 && !s_inis[altidx].present)
+			{
+				s_inis[altidx].present = true;
+				strcpyz(s_inis[altidx].filename, entry->d_name);
+				if (strcasecmp(altname, "alt"))
+				{
+					strcpyz(s_inis[altidx].name, altname);
+				}
+				valid_inis |= 1 << altidx;
+			}
+		}
+	}
+
+	closedir(dir);
+
+	s_enumerated_inis = true;
+
+	return valid_inis;
+}
+
+bool cfg_get_valid(uint8_t alt)
+{
+	if (!s_enumerated_inis) cfg_enumerate_inis();
+
+	if (alt < 4) return s_inis[alt].present;
+
+	return false;
+}
+
+const char* cfg_get_name(uint8_t alt)
+{
+	if (!s_enumerated_inis) cfg_enumerate_inis();
+
+	if (alt < 4) return s_inis[alt].name;
+
+	return "None";
+}
+
+const char* cfg_get_filename(uint8_t alt)
+{
+	if (!s_enumerated_inis) cfg_enumerate_inis();
+
+	if (alt < 4 && s_inis[alt].present) return s_inis[alt].filename;
+
+	return "MiSTer_Invalid.ini";
+}
+
 static constexpr int CFG_ERRORS_MAX = 4;
 static constexpr int CFG_ERRORS_STRLEN = 128;
 static char cfg_errors[CFG_ERRORS_MAX][CFG_ERRORS_STRLEN];
 static int cfg_error_count = 0;
-
-const char* cfg_get_name(uint8_t alt)
-{
-	static char name[64];
-	strcpy(name, "MiSTer.ini");
-
-	if (alt == 1)
-	{
-		strcpy(name, "MiSTer_alt_1.ini");
-		if (FileExists(name)) return name;
-		return "MiSTer_alt.ini";
-	}
-
-	if (alt && alt < 4) sprintf(name, "MiSTer_alt_%d.ini", alt);
-	return name;
-}
 
 void cfg_parse()
 {

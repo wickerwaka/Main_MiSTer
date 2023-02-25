@@ -3436,7 +3436,7 @@ void HandleUI(void)
 		{
 			for (int i = 0; i < OsdGetSize() - 1; i++) OsdWrite(i, "", 0, 0);
 			flag = 1;
-			for (int i = 1; i < 4; i++) if (FileExists(cfg_get_name(i))) flag |= 1 << i;
+			flag |= cfg_enumerate_inis();
 			flag |= altcfg() << 4;
 			menusub = 3;
 		}
@@ -3449,13 +3449,15 @@ void HandleUI(void)
 		m = 0;
 		for (int i = 0; i < 4; i++)
 		{
+			char trunc[5];
+			sprintf(trunc, "%4.4s", cfg_get_name(i));
 			int en = flag & (1 << i);
 			if (i == (flag >> 4) && en) strcat(s, "\xc");
 			strcat(s, " ");
 			if (m) strcat(s, "\xc ");
 			m = (i == (flag >> 4) && en);
 			if (!en) strcat(s, "\xb");
-			strcat(s, (!i) ? "Main" : (i == 1) ? "Alt1" : (i == 2) ? "Alt2" : "Alt3");
+			strcat(s, trunc);
 			if (!en) strcat(s, "\xb");
 		}
 		strcat(s, " ");

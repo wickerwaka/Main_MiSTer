@@ -2792,7 +2792,8 @@ void user_io_set_ini(int ini_num)
 		xml = NULL;
 	}
 
-	if (FileExists(cfg_get_name(ini_num)))
+	cfg_enumerate_inis();
+	if (cfg_get_valid(ini_num))
 	{
 		altcfg(ini_num);
 		fpga_load_rbf(name, NULL, xml);
