@@ -1418,7 +1418,7 @@ void n64_poll() {
 					Info("Failed to initialize cheat engine!", 2000);
 				}
 				else {
-					printf("Mapped RDRAM at 0x%" PRIXPTR ".\n", (uintptr_t)rdram_ptr);
+					printf("Mapped RDRAM at 0x%p.\n", rdram_ptr);
 				}
 			}
 			else if (cheat_codes && cheats_enabled()) {
@@ -1534,7 +1534,7 @@ int n64_rom_tx(const char* name, unsigned char idx, uint32_t load_addr, uint32_t
 	   2 = Found some ROM info in DB (Save type etc.), but System region and/or CIC has not been determined
 	   3 = Has detected everything, System type, CIC, Save type etc. */
 	uint8_t rom_settings_detected = 0;
-	ByteOrder rom_endianness;
+	ByteOrder rom_endianness = ByteOrder::UNKNOWN;
 	uint8_t md5[MD5_LENGTH];
 	char md5_hex[MD5_LENGTH * 2 + 1];
 	uint64_t bootcode_sums[2] = { };

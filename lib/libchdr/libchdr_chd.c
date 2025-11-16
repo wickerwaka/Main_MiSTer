@@ -2213,6 +2213,8 @@ CHD_EXPORT chd_error chd_read_header(const char *filename, chd_header *header)
 	chd_error err = CHDERR_NONE;
 	chd_file chd;
 
+	chd.file = NULL;
+
 	/* punt if NULL */
 	if (filename == NULL || header == NULL)
 		EARLY_EXIT(err = CHDERR_INVALID_PARAMETER);

@@ -1925,7 +1925,7 @@ void sharpmz_send_file(romData_t &image, char *dirPrefix)
 //
 short sharpmz_read_ram(const char *memDumpFile, short bank)
 {
-    unsigned int  actualWriteSize;
+    unsigned int  actualWriteSize = 0;
     fileTYPE      file = {};
 
     // Open the memory image debug file for writing.
@@ -1949,7 +1949,7 @@ short sharpmz_read_ram(const char *memDumpFile, short bank)
 
         // The bank size is stored in the config.
         //
-        for (unsigned long j = 0; j < MZBANKSIZE[mb] or actualWriteSize == 0; j += actualWriteSize)
+        for (unsigned long j = 0; j < MZBANKSIZE[mb] || actualWriteSize == 0; j += actualWriteSize)
         {
             spi_read(sector_buffer, 512, 0);
 

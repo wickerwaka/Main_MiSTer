@@ -191,7 +191,7 @@ void OsdSetTitle(const char *s, int a)
 	uint c = (OSDHEIGHT - 1 - outp) / 2;
 	memmove(titlebuffer + c, titlebuffer, outp);
 
-	for (i = 0; i<c; ++i) titlebuffer[i] = 0;
+	for (i = 0; i<c && i<sizeof(titlebuffer); ++i) titlebuffer[i] = 0;
 
 	// Finally rotate it.
 	for (i = 0; i<OSDHEIGHT; i += 8)

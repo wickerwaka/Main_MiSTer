@@ -87,7 +87,7 @@ $(BUILDDIR)/%.cpp.o: %.cpp
 
 $(BUILDDIR)/%.png.o: %.png
 	$(Q)$(info $<)
-	$(Q)$(LD) -r -b binary -o $@ $< 2>&1 | $(OUTPUT_FILTER)
+	$(Q)$(LD) -r -b binary -z noexecstack -o $@ $< 2>&1 | $(OUTPUT_FILTER)
 
 ifneq ($(MAKECMDGOALS), clean)
 -include $(DEP)

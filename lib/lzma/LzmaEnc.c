@@ -2801,7 +2801,8 @@ const Byte *LzmaEnc_GetCurBuf(CLzmaEncHandle pp)
   return p->matchFinder.GetPointerToCurrentPos(p->matchFinderObj) - p->additionalOffset;
 }
 
-
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdangling-pointer"
 SRes LzmaEnc_CodeOneMemBlock(CLzmaEncHandle pp, BoolInt reInit,
     Byte *dest, size_t *destLen, UInt32 desiredPackSize, UInt32 *unpackSize)
 {
@@ -2839,6 +2840,7 @@ SRes LzmaEnc_CodeOneMemBlock(CLzmaEncHandle pp, BoolInt reInit,
 
   return res;
 }
+#pragma GCC diagnostic pop
 
 
 static SRes LzmaEnc_Encode2(CLzmaEnc *p, ICompressProgress *progress)
